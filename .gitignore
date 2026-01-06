@@ -1,5 +1,6 @@
 .DS_Store
 .idea/
+
 # Python-generated files
 __pycache__/
 *.py[oc]
@@ -10,4 +11,16 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Output files
 output/
+logs/
+
+# Frontend build
+web/
+
+# PyInstaller
+*.spec.bak
+
+# Icon generation
+icons/

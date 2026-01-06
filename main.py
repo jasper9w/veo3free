@@ -1,30 +1,74 @@
 #!/usr/bin/env python3
 """
-图片生成任务控制端 - GUI版本
-支持批量任务队列，带进度显示，自动下载图片到output目录
+Veo3Free - AI生成工具 PyWebview + React 版本
 """
 
 import asyncio
 import json
 import os
-import re
-import tkinter as tk
-from tkinter import ttk, scrolledtext, filedialog, messagebox
+import sys
+import base64
+import io
+import subprocess
+import platform
+import threading
 from datetime import datetime
 from pathlib import Path
-import threading
-import queue
-import base64
+
+from PIL import Image
+
+try:
+    from loguru import logger
+except ImportError:
+    print("请安装 loguru: pip install loguru")
+    sys.exit(1)
+
+try:
+    from openpyxl import Workbook, load_workbook
+except ImportError:
+    print("请安装 openpyxl: pip install openpyxl")
+    Workbook = None
+    load_workbook = None
 
 try:
     from websockets.server import serve
 except ImportError:
     print("请安装 websockets: pip install websockets")
-    exit(1)
+    sys.exit(1)
 
-# 创建output目录
-OUTPUT_DIR = Path("output")
-OUTPUT_DIR.mkdir(exist_ok=True)
+try:
+    import webview
+except ImportError:
+    print("请安装 pywebview: pip install pywebview")
+    sys.exit(1)
+
+# 确定输出目录位置
+if getattr(sys, 'frozen', False):
+    # 打包后，使用用户文档目录
+    OUTPUT_DIR = Path.home() / "Documents" / "veo3free" / "output"
+else:
+    # 开发模式，使用项目目录
+    OUTPUT_DIR = Path("output")
+
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+# 配置loguru日志
+LOGS_DIR = OUTPUT_DIR.parent / "logs" if getattr(sys, 'frozen', False) else Path("logs")
+LOGS_DIR.mkdir(parents=True, exist_ok=True)
+
+logger.remove()
+logger.add(
+    lambda msg: print(msg, end=""),
+    format="{time:HH:mm:ss} | {message}",
+    level="INFO"
+)
+log_file = LOGS_DIR / "veo3free.log"
+logger.add(
+    log_file,
+    format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}",
+    rotation="10 MB",
+    retention="7 days"
+)
 
 
 class TaskManager:
@@ -34,35 +78,97 @@ class TaskManager:
         self.tasks = []
         self.current_index = 0
         self.is_running = False
-        self.clients = set()
-        self.pending_results = {}
-        self.result_event = asyncio.Event()
-        self.current_task_id = None
+        self.clients = {}
+        self.next_page_number = 1
 
-    def add_tasks(self, prompts):
-        """添加批量任务"""
-        for prompt in prompts:
-            prompt = prompt.strip()
-            if prompt:
-                task_id = f"task_{len(self.tasks)}_{datetime.now().strftime('%H%M%S%f')}"
-                safe_name = re.sub(r'[<>:"/\\|?*]', '_', prompt)[:50]
-                filename = f"{len(self.tasks):03d}_{safe_name}.png"
-                self.tasks.append({
-                    'id': task_id,
-                    'prompt': prompt,
-                    'status': '等待中',
-                    'filename': filename,
-                    'url': None
-                })
-        return len(self.tasks)
+    def register_client(self, websocket, page_url):
+        import time
+        for cid, info in list(self.clients.items()):
+            if info['url'] == page_url:
+                del self.clients[cid]
 
-    def clear_tasks(self):
-        """清空任务列表"""
-        self.tasks = []
-        self.current_index = 0
+        client_id = f"c{len(self.clients)}_{int(time.time()) % 10000}"
+        page_number = self.next_page_number
+        self.next_page_number += 1
+        self.clients[client_id] = {
+            'ws': websocket,
+            'url': page_url,
+            'busy': False,
+            'task_id': None,
+            'page_number': page_number
+        }
+        return client_id, page_number
+
+    def remove_client(self, client_id):
+        if client_id in self.clients:
+            task_id = self.clients[client_id]['task_id']
+            if task_id:
+                for task in self.tasks:
+                    if task['id'] == task_id and task['status'] == '处理中':
+                        task['status'] = '等待中'
+            del self.clients[client_id]
+
+    def get_idle_client(self):
+        for cid, info in self.clients.items():
+            if not info['busy']:
+                return cid, info
+        return None, None
+
+    def mark_client_busy(self, client_id, task_id):
+        if client_id in self.clients:
+            self.clients[client_id]['busy'] = True
+            self.clients[client_id]['task_id'] = task_id
+            for task in self.tasks:
+                if task['id'] == task_id:
+                    task['client_id'] = client_id
+                    break
+
+    def mark_client_idle(self, client_id):
+        if client_id in self.clients:
+            self.clients[client_id]['busy'] = False
+            self.clients[client_id]['task_id'] = None
+
+    def get_client_count(self):
+        total = len(self.clients)
+        busy = sum(1 for c in self.clients.values() if c['busy'])
+        return total, busy
+
+    def update_task_status_detail(self, task_id, status_detail):
+        for task in self.tasks:
+            if task['id'] == task_id:
+                task['status_detail'] = status_detail
+                return True
+        return False
+
+    def add_task(self, prompt, task_type, aspect_ratio, resolution,
+                 reference_images=None, output_dir=None):
+        prompt = prompt.strip()
+        if not prompt:
+            return None
+
+        if task_type == "Text to Video":
+            reference_images = []
+
+        task_id = f"task_{len(self.tasks)}_{datetime.now().strftime('%H%M%S%f')}"
+        file_ext = ".mp4" if "Video" in task_type else ".png"
+
+        task = {
+            'id': task_id,
+            'prompt': prompt,
+            'status': '等待中',
+            'status_detail': '',
+            'file_ext': file_ext,
+            'output_dir': output_dir,
+            'client_id': None,
+            'task_type': task_type,
+            'aspect_ratio': aspect_ratio,
+            'resolution': resolution,
+            'reference_images': reference_images or []
+        }
+        self.tasks.append(task)
+        return task
 
     def get_next_task(self):
-        """获取下一个待处理任务"""
         while self.current_index < len(self.tasks):
             task = self.tasks[self.current_index]
             if task['status'] == '等待中':
@@ -71,28 +177,100 @@ class TaskManager:
         return None
 
 
-class WebSocketServer:
-    """WebSocket服务器"""
+class ImageProcessor:
+    @staticmethod
+    def compress_image_to_base64(image_path, max_size_bytes=1024 * 1024):
+        try:
+            img = Image.open(image_path)
+            if img.mode in ('RGBA', 'LA', 'P'):
+                background = Image.new('RGB', img.size, (255, 255, 255))
+                if img.mode == 'P':
+                    img = img.convert('RGBA')
+                background.paste(img, mask=img.split()[-1] if img.mode in ('RGBA', 'LA') else None)
+                img = background
+            elif img.mode != 'RGB':
+                img = img.convert('RGB')
 
-    def __init__(self, task_manager, log_callback, update_callback):
+            quality = 95
+            while quality > 5:
+                buffer = io.BytesIO()
+                img.save(buffer, format='JPEG', quality=quality, optimize=True)
+                size = buffer.tell()
+                if size <= max_size_bytes:
+                    buffer.seek(0)
+                    return base64.b64encode(buffer.getvalue()).decode('utf-8')
+                quality -= 5
+
+            scale = 0.9
+            while scale > 0.1:
+                new_size = (int(img.size[0] * scale), int(img.size[1] * scale))
+                resized_img = img.resize(new_size, Image.Resampling.LANCZOS)
+                buffer = io.BytesIO()
+                resized_img.save(buffer, format='JPEG', quality=85, optimize=True)
+                size = buffer.tell()
+                if size <= max_size_bytes:
+                    buffer.seek(0)
+                    return base64.b64encode(buffer.getvalue()).decode('utf-8')
+                scale -= 0.1
+
+            buffer.seek(0)
+            return base64.b64encode(buffer.getvalue()).decode('utf-8')
+        except Exception as e:
+            logger.error(f"压缩图片失败: {e}")
+            return None
+
+
+class ImageDownloader:
+    @staticmethod
+    async def save_base64_image(base64_data, filename, output_dir=None):
+        if output_dir is None:
+            output_dir = OUTPUT_DIR
+        filepath = Path(output_dir) / filename
+        try:
+            image_data = base64.b64decode(base64_data)
+            with open(filepath, 'wb') as f:
+                f.write(image_data)
+            return filepath
+        except Exception as e:
+            logger.error(f"保存图片失败: {e}")
+            return None
+
+
+class WebSocketServer:
+    def __init__(self, task_manager):
         self.task_manager = task_manager
-        self.log = log_callback
-        self.update_ui = update_callback
         self.server = None
-        self.chunk_buffer = {}  # 存储分块数据
+        self.chunk_buffer = {}
+
+    def log(self, message):
+        logger.info(message)
 
     async def handler(self, websocket):
-        self.task_manager.clients.add(websocket)
-        self.log(f"✅ 客户端已连接，当前连接数: {len(self.task_manager.clients)}")
-        self.update_ui()
-
+        client_id = None
+        page_number = None
         try:
+            first_msg = await websocket.recv()
+            data = json.loads(first_msg)
+
+            if data.get('type') != 'register':
+                self.log(f"⚠️ 首条消息不是注册消息，断开连接")
+                return
+
+            page_url = data.get('page_url', 'unknown')
+            client_id, page_number = self.task_manager.register_client(websocket, page_url)
+            total, busy = self.task_manager.get_client_count()
+            self.log(f"✅ 客户端注册: {client_id} (页面#{page_number})，当前连接数: {total}")
+
+            await websocket.send(json.dumps({
+                'type': 'register_success',
+                'client_id': client_id
+            }))
+
             async for message in websocket:
                 data = json.loads(message)
                 msg_type = data.get("type")
 
                 if msg_type == "image_chunk":
-                    # 处理分块数据
                     task_id = data.get("task_id")
                     chunk_index = data.get("chunk_index")
                     total_chunks = data.get("total_chunks")
@@ -102,57 +280,92 @@ class WebSocketServer:
                         self.chunk_buffer[task_id] = {}
 
                     self.chunk_buffer[task_id][chunk_index] = chunk_data
-                    self.log(f"📥 收到分块 {chunk_index + 1}/{total_chunks}")
+                    self.log(f"📥 [#{page_number}] 收到分块 {chunk_index + 1}/{total_chunks}")
 
-                    # 检查是否所有分块都已收到
                     if len(self.chunk_buffer[task_id]) == total_chunks:
-                        # 合并所有分块
                         full_base64 = ''.join(
                             self.chunk_buffer[task_id][i]
                             for i in range(total_chunks)
                         )
-                        self.task_manager.pending_results[task_id] = {
-                            'type': 'base64',
-                            'data': full_base64
-                        }
                         del self.chunk_buffer[task_id]
-                        self.log(f"✅ 分块合并完成，总大小: {len(full_base64) // 1024} KB")
-                        self.task_manager.result_event.set()
+                        self.log(f"✅ [#{page_number}] 分块合并完成，总大小: {len(full_base64) // 1024} KB")
+                        await self.handle_image_result(client_id, task_id, full_base64)
 
                 elif msg_type == "image_data":
-                    # 直接接收完整图片数据
                     task_id = data.get("task_id")
                     image_data = data.get("data")
-                    self.log(f"📥 收到图片数据，大小: {len(image_data) // 1024} KB")
-                    self.task_manager.pending_results[task_id] = {
-                        'type': 'base64',
-                        'data': image_data
-                    }
-                    self.task_manager.result_event.set()
+                    self.log(f"📥 [#{page_number}] 收到图片数据，大小: {len(image_data) // 1024} KB")
+                    await self.handle_image_result(client_id, task_id, image_data)
 
                 elif msg_type == "result":
                     task_id = data.get("task_id")
-                    url = data.get("url")
-                    self.log(f"📥 收到结果: {url[:80]}..." if url and len(url) > 80 else f"📥 收到结果: {url}")
-                    self.task_manager.pending_results[task_id] = url
-                    self.task_manager.result_event.set()
+                    error = data.get("error")
+                    if error:
+                        self.log(f"❌ [#{page_number}] 任务失败: {error}")
+                        for task in self.task_manager.tasks:
+                            if task['id'] == task_id:
+                                task['status'] = '失败'
+                                task['status_detail'] = error
+                                break
+                    self.task_manager.mark_client_idle(client_id)
 
                 elif msg_type == "status":
-                    self.log(f"📌 状态: {data.get('message')}")
+                    status_msg = data.get('message', '')
+                    self.log(f"📌 [#{page_number}] {status_msg}")
+                    task_id = self.task_manager.clients.get(client_id, {}).get('task_id')
+                    if task_id:
+                        self.task_manager.update_task_status_detail(task_id, status_msg)
 
         except Exception as e:
             self.log(f"连接异常: {e}")
         finally:
-            self.task_manager.clients.discard(websocket)
-            self.log(f"❌ 客户端断开，当前连接数: {len(self.task_manager.clients)}")
-            self.update_ui()
+            if client_id:
+                self.task_manager.remove_client(client_id)
+                total, busy = self.task_manager.get_client_count()
+                self.log(f"❌ 客户端断开: {client_id} (页面#{page_number})，当前连接数: {total}")
+
+    async def handle_image_result(self, client_id, task_id, base64_data):
+        for task in self.task_manager.tasks:
+            if task['id'] == task_id:
+                output_dir = task.get('output_dir')
+                if output_dir:
+                    if not Path(output_dir).is_absolute():
+                        output_dir = OUTPUT_DIR / output_dir
+                    else:
+                        output_dir = Path(output_dir)
+                else:
+                    output_dir = OUTPUT_DIR
+                output_dir.mkdir(parents=True, exist_ok=True)
+
+                timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                file_ext = task.get('file_ext', '.png')
+                filename = f"{timestamp}{file_ext}"
+                filepath = output_dir / filename
+
+                counter = 1
+                while filepath.exists():
+                    filename = f"{timestamp}_{counter}{file_ext}"
+                    filepath = output_dir / filename
+                    counter += 1
+
+                saved = await ImageDownloader.save_base64_image(base64_data, filename, output_dir)
+                if saved:
+                    task['status'] = '已完成'
+                    task['saved_path'] = str(saved)
+                    task['output_dir_path'] = str(output_dir)
+                    self.log(f"💾 已保存: {saved}")
+                else:
+                    task['status'] = '下载失败'
+                    self.log(f"❌ 下载失败")
+                break
+        self.task_manager.mark_client_idle(client_id)
 
     async def start(self):
         self.server = await serve(
             self.handler,
             "localhost",
             12345,
-            max_size=50 * 1024 * 1024  # 增加到 50MB
+            max_size=50 * 1024 * 1024
         )
         self.log("🚀 WebSocket服务器已启动: ws://localhost:12345")
 
@@ -162,392 +375,344 @@ class WebSocketServer:
             await self.server.wait_closed()
 
 
-class ImageDownloader:
-    """图片下载器"""
+class Api:
+    """暴露给前端的 API"""
 
-    @staticmethod
-    async def save_base64_image(base64_data, filename):
-        """保存base64图片"""
-        filepath = OUTPUT_DIR / filename
-        try:
-            image_data = base64.b64decode(base64_data)
-            with open(filepath, 'wb') as f:
-                f.write(image_data)
-            return filepath
-        except Exception as e:
-            print(f"保存图片失败: {e}")
-            return None
+    def __init__(self, task_manager, loop):
+        self.task_manager = task_manager
+        self.loop = loop
+        self.window = None
 
-
-class Application:
-    def __init__(self):
-        self.root = tk.Tk()
-        self.root.title("图片生成任务控制端")
-        self.root.geometry("900x700")
-
-        self.task_manager = TaskManager()
-        self.msg_queue = queue.Queue()
-        self.loop = None
-        self.ws_server = None
-
-        self.setup_ui()
-        self.start_async_loop()
-        self.process_queue()
-
-    def setup_ui(self):
-        # 主框架
-        main_frame = ttk.Frame(self.root, padding="10")
-        main_frame.pack(fill=tk.BOTH, expand=True)
-
-        # 状态栏
-        status_frame = ttk.Frame(main_frame)
-        status_frame.pack(fill=tk.X, pady=(0, 10))
-
-        self.status_label = ttk.Label(status_frame, text="🔴 服务器未启动")
-        self.status_label.pack(side=tk.LEFT)
-
-        self.client_label = ttk.Label(status_frame, text="连接数: 0")
-        self.client_label.pack(side=tk.RIGHT)
-
-        # 输入区域
-        input_frame = ttk.LabelFrame(main_frame, text="批量输入提示词（每行一个）", padding="5")
-        input_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
-
-        self.input_text = scrolledtext.ScrolledText(input_frame, height=8, wrap=tk.WORD)
-        self.input_text.pack(fill=tk.BOTH, expand=True)
-
-        # 按钮区域
-        btn_frame = ttk.Frame(main_frame)
-        btn_frame.pack(fill=tk.X, pady=(0, 10))
-
-        self.start_server_btn = ttk.Button(btn_frame, text="启动服务器", command=self.toggle_server)
-        self.start_server_btn.pack(side=tk.LEFT, padx=(0, 5))
-
-        ttk.Button(btn_frame, text="添加任务", command=self.add_tasks).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="从文件导入", command=self.import_from_file).pack(side=tk.LEFT, padx=5)
-
-        self.run_btn = ttk.Button(btn_frame, text="▶ 开始执行", command=self.start_execution)
-        self.run_btn.pack(side=tk.LEFT, padx=5)
-
-        self.stop_btn = ttk.Button(btn_frame, text="⏹ 停止", command=self.stop_execution, state=tk.DISABLED)
-        self.stop_btn.pack(side=tk.LEFT, padx=5)
-
-        ttk.Button(btn_frame, text="清空任务", command=self.clear_tasks).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="打开输出目录", command=self.open_output_dir).pack(side=tk.RIGHT)
-
-        # 任务列表
-        task_frame = ttk.LabelFrame(main_frame, text="任务队列", padding="5")
-        task_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
-
-        # 进度条
-        self.progress_var = tk.DoubleVar()
-        self.progress_bar = ttk.Progressbar(task_frame, variable=self.progress_var, maximum=100)
-        self.progress_bar.pack(fill=tk.X, pady=(0, 5))
-
-        self.progress_label = ttk.Label(task_frame, text="0/0 完成")
-        self.progress_label.pack()
-
-        # 任务表格
-        columns = ('序号', '提示词', '状态', '文件名')
-        self.task_tree = ttk.Treeview(task_frame, columns=columns, show='headings', height=8)
-
-        self.task_tree.heading('序号', text='#')
-        self.task_tree.heading('提示词', text='提示词')
-        self.task_tree.heading('状态', text='状态')
-        self.task_tree.heading('文件名', text='文件名')
-
-        self.task_tree.column('序号', width=50, anchor=tk.CENTER)
-        self.task_tree.column('提示词', width=400)
-        self.task_tree.column('状态', width=100, anchor=tk.CENTER)
-        self.task_tree.column('文件名', width=200)
-
-        scrollbar = ttk.Scrollbar(task_frame, orient=tk.VERTICAL, command=self.task_tree.yview)
-        self.task_tree.configure(yscrollcommand=scrollbar.set)
-
-        self.task_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-
-        # 日志区域
-        log_frame = ttk.LabelFrame(main_frame, text="日志", padding="5")
-        log_frame.pack(fill=tk.BOTH, expand=True)
-
-        self.log_text = scrolledtext.ScrolledText(log_frame, height=8, wrap=tk.WORD, state=tk.DISABLED)
-        self.log_text.pack(fill=tk.BOTH, expand=True)
-
-    def log(self, message):
-        """添加日志（线程安全）"""
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        self.msg_queue.put(('log', f"[{timestamp}] {message}"))
-
-    def update_ui_from_queue(self):
-        """从队列更新UI"""
-        self.msg_queue.put(('update_ui', None))
-
-    def process_queue(self):
-        """处理消息队列"""
-        try:
-            while True:
-                msg_type, data = self.msg_queue.get_nowait()
-                if msg_type == 'log':
-                    self.log_text.config(state=tk.NORMAL)
-                    self.log_text.insert(tk.END, data + "\n")
-                    self.log_text.see(tk.END)
-                    self.log_text.config(state=tk.DISABLED)
-                elif msg_type == 'update_ui':
-                    self.refresh_task_list()
-                    self.client_label.config(text=f"连接数: {len(self.task_manager.clients)}")
-        except queue.Empty:
-            pass
-        self.root.after(100, self.process_queue)
-
-    def start_async_loop(self):
-        """在后台线程启动asyncio事件循环"""
-
-        def run_loop():
-            self.loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(self.loop)
-            self.loop.run_forever()
-
-        thread = threading.Thread(target=run_loop, daemon=True)
-        thread.start()
-
-        # 等待loop启动
-        while self.loop is None:
-            pass
-
-    def toggle_server(self):
-        """切换服务器状态"""
-        if self.ws_server is None:
-            asyncio.run_coroutine_threadsafe(self.start_server(), self.loop)
-            self.start_server_btn.config(text="停止服务器")
-            self.status_label.config(text="🟢 服务器运行中 - ws://localhost:12345")
-        else:
-            asyncio.run_coroutine_threadsafe(self.stop_server(), self.loop)
-            self.start_server_btn.config(text="启动服务器")
-            self.status_label.config(text="🔴 服务器未启动")
-            self.ws_server = None
-
-    async def start_server(self):
-        """启动WebSocket服务器"""
-        self.ws_server = WebSocketServer(self.task_manager, self.log, self.update_ui_from_queue)
-        await self.ws_server.start()
-
-    async def stop_server(self):
-        """停止服务器"""
-        if self.ws_server:
-            await self.ws_server.stop()
-            self.log("服务器已停止")
-
-    def add_tasks(self):
-        """从文本框添加任务"""
-        text = self.input_text.get("1.0", tk.END)
-        prompts = [line.strip() for line in text.strip().split('\n') if line.strip()]
-        if prompts:
-            count = self.task_manager.add_tasks(prompts)
-            self.refresh_task_list()
-            self.input_text.delete("1.0", tk.END)
-            self.log(f"已添加 {len(prompts)} 个任务，当前共 {count} 个")
-        else:
-            messagebox.showwarning("提示", "请输入至少一个提示词")
-
-    def import_from_file(self):
-        """从文件导入"""
-        filepath = filedialog.askopenfilename(
-            filetypes=[("文本文件", "*.txt"), ("所有文件", "*.*")]
+    def add_task(self, prompt, task_type, aspect_ratio, resolution, reference_images, output_dir):
+        task = self.task_manager.add_task(
+            prompt=prompt,
+            task_type=task_type,
+            aspect_ratio=aspect_ratio,
+            resolution=resolution,
+            reference_images=reference_images or [],
+            output_dir=output_dir or None
         )
-        if filepath:
-            with open(filepath, 'r', encoding='utf-8') as f:
-                prompts = [line.strip() for line in f if line.strip()]
-            if prompts:
-                count = self.task_manager.add_tasks(prompts)
-                self.refresh_task_list()
-                self.log(f"从文件导入 {len(prompts)} 个任务，当前共 {count} 个")
+        if task:
+            logger.info(f"已添加任务，当前共 {len(self.task_manager.tasks)} 个")
+            return {'success': True}
+        return {'success': False, 'error': '添加失败'}
 
-    def refresh_task_list(self):
-        """刷新任务列表显示"""
-        self.task_tree.delete(*self.task_tree.get_children())
-
-        completed = 0
-        for i, task in enumerate(self.task_manager.tasks):
-            status = task['status']
-            if status == '已完成':
-                completed += 1
-                tag = 'completed'
-            elif status == '处理中':
-                tag = 'processing'
-            elif status == '失败' or status == '下载失败':
-                tag = 'failed'
-            elif status == '超时':
-                tag = 'timeout'
-            else:
-                tag = 'pending'
-
-            self.task_tree.insert('', tk.END, values=(
-                i + 1,
-                task['prompt'][:50] + ('...' if len(task['prompt']) > 50 else ''),
-                status,
-                task['filename']
-            ), tags=(tag,))
-
-        self.task_tree.tag_configure('completed', foreground='green')
-        self.task_tree.tag_configure('processing', foreground='blue')
-        self.task_tree.tag_configure('failed', foreground='red')
-        self.task_tree.tag_configure('timeout', foreground='orange')
-        self.task_tree.tag_configure('pending', foreground='gray')
-
-        total = len(self.task_manager.tasks)
-        if total > 0:
-            self.progress_var.set((completed / total) * 100)
-            self.progress_label.config(text=f"{completed}/{total} 完成")
-        else:
-            self.progress_var.set(0)
-            self.progress_label.config(text="0/0 完成")
+    def get_status(self):
+        total, busy = self.task_manager.get_client_count()
+        tasks_data = []
+        for t in self.task_manager.tasks:
+            tasks_data.append({
+                'id': t['id'],
+                'prompt': t['prompt'],
+                'status': t['status'],
+                'status_detail': t.get('status_detail', ''),
+                'task_type': t['task_type'],
+                'aspect_ratio': t['aspect_ratio'],
+                'resolution': t['resolution'],
+                'saved_path': t.get('saved_path', ''),
+                'output_dir': t.get('output_dir', '')
+            })
+        return {
+            'client_count': total,
+            'busy_count': busy,
+            'is_running': self.task_manager.is_running,
+            'tasks': tasks_data
+        }
 
     def start_execution(self):
-        """开始执行任务"""
-        if not self.task_manager.clients:
-            messagebox.showwarning("提示", "没有连接的客户端，请先在浏览器中打开目标页面")
+        total, _ = self.task_manager.get_client_count()
+        if total == 0:
+            logger.warning("没有连接的客户端")
             return
-
         if not self.task_manager.tasks:
-            messagebox.showwarning("提示", "任务列表为空")
+            logger.warning("任务列表为空")
             return
-
         self.task_manager.is_running = True
-        self.run_btn.config(state=tk.DISABLED)
-        self.stop_btn.config(state=tk.NORMAL)
-
-        asyncio.run_coroutine_threadsafe(self.execute_tasks(), self.loop)
+        asyncio.run_coroutine_threadsafe(self._execute_tasks(), self.loop)
 
     def stop_execution(self):
-        """停止执行"""
         self.task_manager.is_running = False
-        self.run_btn.config(state=tk.NORMAL)
-        self.stop_btn.config(state=tk.DISABLED)
-        self.log("⏹ 已停止执行")
+        logger.info("⏹ 已停止执行")
 
-    async def execute_tasks(self):
-        """执行所有任务"""
-        self.log("▶ 开始执行任务队列")
+    async def _execute_tasks(self):
+        logger.info("▶ 开始执行任务队列")
 
         while self.task_manager.is_running:
             task = self.task_manager.get_next_task()
             if not task:
-                self.log("✅ 所有任务已完成")
-                break
+                has_busy = any(c['busy'] for c in self.task_manager.clients.values())
+                if not has_busy:
+                    logger.info("✅ 所有任务已完成")
+                    break
+                await asyncio.sleep(1)
+                continue
 
-            if not self.task_manager.clients:
-                self.log("⚠️ 客户端已断开，暂停执行")
-                break
+            client_id, client_info = self.task_manager.get_idle_client()
+            if not client_info:
+                await asyncio.sleep(1)
+                continue
 
-            # 更新状态为处理中
             task['status'] = '处理中'
-            self.update_ui_from_queue()
+            self.task_manager.mark_client_busy(client_id, task['id'])
+            self.task_manager.current_index += 1
 
-            self.log(f"📤 发送任务: {task['prompt'][:50]}...")
+            logger.info(f"📤 [{client_id}] 分配任务: {task['prompt'][:40]}...")
 
-            # 清除之前的结果
-            self.task_manager.result_event.clear()
-            self.task_manager.current_task_id = task['id']
-
-            # 发送任务到浏览器
             message = json.dumps({
                 'type': 'task',
                 'task_id': task['id'],
-                'prompt': task['prompt']
+                'prompt': task['prompt'],
+                'task_type': task['task_type'],
+                'aspect_ratio': task['aspect_ratio'],
+                'resolution': task['resolution'],
+                'reference_images': task['reference_images']
             })
 
-            for client in list(self.task_manager.clients):
-                try:
-                    await client.send(message)
-                except Exception as e:
-                    self.log(f"发送失败: {e}")
-
-            # 等待结果（最多等待120秒）
             try:
-                await asyncio.wait_for(
-                    self.task_manager.result_event.wait(),
-                    timeout=120.0
-                )
+                await client_info['ws'].send(message)
+            except Exception as e:
+                logger.error(f"❌ [{client_id}] 发送失败: {e}")
+                task['status'] = '等待中'
+                self.task_manager.mark_client_idle(client_id)
 
-                result = self.task_manager.pending_results.get(task['id'])
-                if result:
-                    # 尝试下载图片
-                    saved = await self.download_image(result, task['filename'])
-                    if saved:
-                        task['status'] = '已完成'
-                        task['url'] = str(saved)
-                        self.log(f"💾 已保存: {task['filename']}")
-                    else:
-                        task['status'] = '下载失败'
-                        self.log(f"❌ 下载失败: {task['filename']}")
-                else:
-                    task['status'] = '失败'
-                    self.log(f"❌ 未获取到结果")
+            await asyncio.sleep(0.5)
 
-            except asyncio.TimeoutError:
-                task['status'] = '超时'
-                self.log(f"⏱️ 任务超时: {task['prompt'][:30]}...")
+        self.task_manager.is_running = False
+        logger.info("任务队列执行结束")
 
-            self.task_manager.current_index += 1
-            self.update_ui_from_queue()
+    def select_images(self):
+        """打开文件对话框选择图片"""
+        file_types = ('图片文件 (*.png;*.jpg;*.jpeg;*.gif;*.bmp;*.webp)',)
+        result = self.window.create_file_dialog(
+            webview.OPEN_DIALOG,
+            allow_multiple=True,
+            file_types=file_types
+        )
+        if not result:
+            return []
 
-            # 任务间隔
-            await asyncio.sleep(2)
+        images = []
+        for filepath in result:
+            logger.info(f"正在处理: {Path(filepath).name}")
+            base64_data = ImageProcessor.compress_image_to_base64(filepath)
+            if base64_data:
+                images.append(base64_data)
+                size_kb = len(base64_data) * 3 / 4 / 1024
+                logger.info(f"✅ 已添加: {Path(filepath).name} (压缩后 ~{size_kb:.1f}KB)")
+        return images
 
-        self.msg_queue.put(('log', "任务队列执行结束"))
-        # 重置按钮状态
-        self.root.after(0, lambda: self.run_btn.config(state=tk.NORMAL))
-        self.root.after(0, lambda: self.stop_btn.config(state=tk.DISABLED))
+    def import_excel(self):
+        """导入 Excel 文件"""
+        if load_workbook is None:
+            return {'success': False, 'count': 0, 'errors': ['请安装 openpyxl']}
 
-    async def download_image(self, result, filename):
-        """下载图片"""
+        file_types = ('Excel文件 (*.xlsx)',)
+        result = self.window.create_file_dialog(
+            webview.OPEN_DIALOG,
+            file_types=file_types
+        )
+        if not result:
+            return {'success': False, 'count': 0, 'errors': []}
+
+        filepath = result[0]
+
+        task_type_map = {
+            "图片": "Create Image",
+            "文生视频": "Text to Video",
+            "首尾帧视频": "Frames to Video",
+            "多图视频": "Ingredients to Video"
+        }
+        orientation_map = {
+            "横屏": "16:9",
+            "竖屏": "9:16"
+        }
+
+        errors = []
+        count = 0
+
         try:
-            if isinstance(result, dict) and result.get('type') == 'base64':
-                # Base64数据
-                return await ImageDownloader.save_base64_image(result['data'], filename)
-            elif isinstance(result, str):
-                if result.startswith('data:'):
-                    # Data URL
-                    base64_data = result.split(',')[1] if ',' in result else result
-                    return await ImageDownloader.save_base64_image(base64_data, filename)
-                else:
-                    self.log(f"⚠️ 不支持的URL格式: {result[:50]}...")
-        except Exception as e:
-            self.log(f"下载错误: {e}")
-        return None
+            wb = load_workbook(filepath)
+            ws = wb.active
 
-    def clear_tasks(self):
-        """清空任务列表"""
-        if self.task_manager.is_running:
-            messagebox.showwarning("提示", "请先停止执行")
+            for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+                if not row or not row[1]:
+                    continue
+
+                try:
+                    prompt = str(row[1]).strip() if row[1] else ""
+                    if not prompt:
+                        continue
+
+                    task_type_cn = str(row[2]).strip() if len(row) > 2 and row[2] else "图片"
+                    orientation_cn = str(row[3]).strip() if len(row) > 3 and row[3] else "横屏"
+                    resolution = str(row[4]).strip() if len(row) > 4 and row[4] else ""
+                    output_dir = str(row[5]).strip() if len(row) > 5 and row[5] else None
+
+                    task_type = task_type_map.get(task_type_cn, "Create Image")
+                    aspect_ratio = orientation_map.get(orientation_cn, "16:9")
+
+                    if not resolution:
+                        resolution = "1080p" if "Video" in task_type else "4K"
+
+                    reference_images = []
+                    max_images = {
+                        "Create Image": 8,
+                        "Frames to Video": 2,
+                        "Ingredients to Video": 3,
+                        "Text to Video": 0
+                    }.get(task_type, 8)
+
+                    for i in range(max_images):
+                        col_idx = 6 + i
+                        if len(row) > col_idx and row[col_idx]:
+                            img_path = str(row[col_idx]).strip()
+                            if img_path and Path(img_path).exists():
+                                base64_data = ImageProcessor.compress_image_to_base64(img_path)
+                                if base64_data:
+                                    reference_images.append(base64_data)
+
+                    task = self.task_manager.add_task(
+                        prompt=prompt,
+                        task_type=task_type,
+                        aspect_ratio=aspect_ratio,
+                        resolution=resolution,
+                        reference_images=reference_images,
+                        output_dir=output_dir
+                    )
+                    if task:
+                        count += 1
+
+                except Exception as e:
+                    errors.append(f"行{row_idx}: {str(e)}")
+
+            wb.close()
+            logger.info(f"从Excel导入 {count} 个任务")
+            return {'success': True, 'count': count, 'errors': errors}
+
+        except Exception as e:
+            return {'success': False, 'count': 0, 'errors': [str(e)]}
+
+    def export_template(self):
+        """导出 Excel 模板"""
+        if Workbook is None:
             return
-        self.task_manager.clear_tasks()
-        self.refresh_task_list()
-        self.log("已清空任务列表")
+
+        result = self.window.create_file_dialog(
+            webview.SAVE_DIALOG,
+            save_filename='任务模板.xlsx'
+        )
+        if not result:
+            return
+
+        filepath = result if isinstance(result, str) else result[0]
+
+        try:
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "任务列表"
+
+            headers = ["编号", "提示词", "任务类型", "屏幕方向", "分辨率", "输出文件夹",
+                       "图1", "图2", "图3", "图4", "图5", "图6", "图7", "图8"]
+            for col, header in enumerate(headers, start=1):
+                ws.cell(row=1, column=col, value=header)
+
+            examples = [
+                [1, "A beautiful sunset over the ocean", "图片", "横屏", "4K", "sunset"],
+                [2, "A cute cat playing", "文生视频", "横屏", "1080p", "cats"],
+            ]
+
+            for row_idx, example in enumerate(examples, start=2):
+                for col_idx, value in enumerate(example, start=1):
+                    ws.cell(row=row_idx, column=col_idx, value=value)
+
+            wb.save(filepath)
+            logger.info(f"已导出模板: {filepath}")
+
+        except Exception as e:
+            logger.error(f"导出模板失败: {e}")
 
     def open_output_dir(self):
         """打开输出目录"""
-        import subprocess
-        import platform
+        self._open_directory(OUTPUT_DIR)
 
-        path = str(OUTPUT_DIR.absolute())
+    def open_task_dir(self, task_index):
+        """打开任务的输出目录"""
+        if 0 <= task_index < len(self.task_manager.tasks):
+            task = self.task_manager.tasks[task_index]
+            output_dir = task.get('output_dir_path', str(OUTPUT_DIR))
+            self._open_directory(Path(output_dir))
+        else:
+            self._open_directory(OUTPUT_DIR)
+
+    def _open_directory(self, path):
+        path = Path(path)
+        if not path.exists():
+            path.mkdir(parents=True, exist_ok=True)
+
+        path_str = str(path.absolute())
         system = platform.system()
 
         if system == 'Windows':
-            os.startfile(path)
-        elif system == 'Darwin':  # macOS
-            subprocess.run(['open', path])
-        else:  # Linux
-            subprocess.run(['xdg-open', path])
+            os.startfile(path_str)
+        elif system == 'Darwin':
+            subprocess.run(['open', path_str])
+        else:
+            subprocess.run(['xdg-open', path_str])
 
-    def run(self):
-        """运行应用"""
-        # 自动启动服务器
-        self.root.after(500, self.toggle_server)
-        self.root.mainloop()
+
+def run_async_loop(loop):
+    asyncio.set_event_loop(loop)
+    loop.run_forever()
+
+
+def main():
+    # 创建事件循环
+    loop = asyncio.new_event_loop()
+    thread = threading.Thread(target=run_async_loop, args=(loop,), daemon=True)
+    thread.start()
+
+    # 创建任务管理器和 API
+    task_manager = TaskManager()
+    api = Api(task_manager, loop)
+
+    # 启动 WebSocket 服务器
+    ws_server = WebSocketServer(task_manager)
+    asyncio.run_coroutine_threadsafe(ws_server.start(), loop)
+
+    # 确定 web 目录和 URL
+    if getattr(sys, 'frozen', False):
+        # 打包后，使用打包的web目录
+        web_dir = Path(sys._MEIPASS) / 'web'
+        url = str(web_dir / 'index.html')
+    else:
+        # 开发模式
+        web_dir = Path(__file__).parent / 'web'
+        # 检查是否使用开发服务器
+        if os.environ.get('DEV') == '1' or not web_dir.exists():
+            url = 'http://localhost:5173'
+            logger.info("使用开发服务器: http://localhost:5173")
+        else:
+            url = str(web_dir / 'index.html')
+            logger.info(f"使用本地文件: {url}")
+
+    # 创建窗口
+    window = webview.create_window(
+        'Veo3Free - AI生成工具',
+        url,
+        width=1000,
+        height=700,
+        min_size=(800, 600),
+        js_api=api
+    )
+    api.window = window
+
+    # 启动 webview
+    webview.start()
+
+    # 清理
+    asyncio.run_coroutine_threadsafe(ws_server.stop(), loop)
+    loop.call_soon_threadsafe(loop.stop)
 
 
 if __name__ == "__main__":
-    app = Application()
-    app.run()
+    main()

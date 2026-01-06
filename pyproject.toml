@@ -1,10 +1,16 @@
 [project]
-name = "flow2ws"
+name = "veo3free"
 version = "0.1.0"
-description = "Add your description here"
+description = "Veo3 free generation tool"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "aiohttp>=3.13.3",
     "websockets>=15.0.1",
+    "pillow>=11.1.0",
+    "openpyxl>=3.1.5",
+    "loguru>=0.7.3",
+    "pyqt6>=6.10.1",
+    "pywebview>=6.1",
+    "pyinstaller>=6.12.0",
 ]
