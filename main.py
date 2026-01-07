@@ -64,19 +64,36 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 LOGS_DIR = OUTPUT_DIR.parent / "logs" if getattr(sys, 'frozen', False) else Path("logs")
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
-logger.remove()
+logger.remove()  # 移除默认handler
+
+# 控制台输出（简洁格式）
 logger.add(
     lambda msg: print(msg, end=""),
     format="{time:HH:mm:ss} | {message}",
-    level="INFO"
+    level="INFO",
+    filter=lambda record: not record["extra"].get("file_only")
 )
+
+# 文件日志（完整格式，包含异常详情）
 log_file = LOGS_DIR / "veo3free.log"
 logger.add(
     log_file,
     format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}",
     rotation="10 MB",
-    retention="7 days"
+    retention="7 days",
+    encoding="utf-8"
 )
+
+
+def log_error_to_file(message: str, exception: Exception = None):
+    """记录错误：控制台显示ASCII安全版本，文件记录完整信息"""
+    if exception:
+        # 控制台用ascii转义，避免编码问题
+        logger.error(f"{message}: {ascii(str(exception))}")
+        # 文件记录完整堆栈
+        logger.bind(file_only=True).exception(f"{message}")
+    else:
+        logger.error(message)
 
 
 class TaskManager:
@@ -258,7 +275,7 @@ class ImageProcessor:
             buffer.seek(0)
             return base64.b64encode(buffer.getvalue()).decode('utf-8')
         except Exception as e:
-            logger.error(f"压缩图片失败: {e}")
+            log_error_to_file("压缩图片失败", e)
             return None
 
     @staticmethod
@@ -283,7 +300,7 @@ class ImageProcessor:
             buffer.seek(0)
             return base64.b64encode(buffer.read()).decode('utf-8')
         except Exception as e:
-            logger.error(f"生成缩略图失败: {e}")
+            log_error_to_file("生成缩略图失败", e)
             return None
 
 
@@ -300,7 +317,7 @@ class ImageDownloader:
             # 返回绝对路径
             return filepath.absolute()
         except Exception as e:
-            logger.error(f"保存图片失败: {e}")
+            log_error_to_file("保存图片失败", e)
             return None
 
 
@@ -386,7 +403,8 @@ class WebSocketServer:
                         self.task_manager.update_task_status_detail(task_id, status_msg)
 
         except Exception as e:
-            self.log(f"连接异常: {e}")
+            self.log("连接异常")
+            log_error_to_file("WebSocket连接异常", e)
         finally:
             if client_id:
                 self.task_manager.remove_client(client_id)
@@ -442,7 +460,8 @@ class WebSocketServer:
             self.log("WebSocket服务器已启动: ws://localhost:12345")
         except OSError as e:
             # 端口被占用
-            self.log(f"[错误] 无法启动 WebSocket 服务器: {e}")
+            self.log("[错误] 无法启动 WebSocket 服务器")
+            log_error_to_file("WebSocket服务器启动失败", e)
             raise
 
     async def stop(self):
@@ -567,7 +586,7 @@ class Api:
             try:
                 await client_info['ws'].send(message)
             except Exception as e:
-                logger.error(f"[{client_id}] 发送失败: {e}")
+                log_error_to_file(f"[{client_id}] 发送失败", e)
                 task['status'] = '等待中'
                 self.task_manager.mark_client_idle(client_id)
 
@@ -748,7 +767,7 @@ class Api:
             logger.info(f"已导出模板: {filepath}")
 
         except Exception as e:
-            logger.error(f"导出模板失败: {e}")
+            log_error_to_file("导出模板失败", e)
 
     def open_output_dir(self):
         """打开输出目录"""
@@ -826,7 +845,7 @@ def main():
         ws_start_future.result(timeout=5)
     except OSError as e:
         # 端口被占用，弹框提示用户
-        error_msg = f"无法启动应用！\n\nWebSocket 端口 12345 被占用\n\n{str(e)}\n\n请检查是否有其他程序占用该端口，或稍后重试。"
+        error_msg = "无法启动应用!\n\nWebSocket 端口 12345 被占用\n\n请检查是否有其他程序占用该端口，或稍后重试。"
         import tkinter as tk
         from tkinter import messagebox
         root = tk.Tk()
@@ -836,7 +855,7 @@ def main():
         return
     except Exception as e:
         # 其他错误
-        error_msg = f"无法启动 WebSocket 服务器：\n\n{str(e)}"
+        error_msg = "无法启动 WebSocket 服务器，请稍后重试。"
         import tkinter as tk
         from tkinter import messagebox
         root = tk.Tk()
