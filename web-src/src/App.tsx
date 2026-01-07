@@ -198,7 +198,21 @@ function App() {
 
   const handleImportExcel = async () => {
     if (!ready || !api) return;
-    await api.import_excel();
+    const result = await api.import_excel();
+    if (result) {
+      if (result.success) {
+        const message = result.count > 0
+          ? `✅ 导入成功！添加了 ${result.count} 个任务`
+          : '⚠️ 没有有效的任务被导入';
+        alert(message);
+        if (result.errors && result.errors.length > 0) {
+          console.warn('导入警告:', result.errors);
+          alert(`⚠️ 部分行有问题:\n${result.errors.slice(0, 5).join('\n')}${result.errors.length > 5 ? '\n...' : ''}`);
+        }
+      } else {
+        alert(`❌ 导入失败: ${result.errors?.[0] || '未知错误'}`);
+      }
+    }
   };
 
   const handleExportTemplate = async () => {

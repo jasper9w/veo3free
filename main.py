@@ -561,6 +561,23 @@ class Api:
 
         filepath = result[0]
 
+        # 验证分辨率和任务类型是否匹配
+        def validate_resolution(task_type, resolution):
+            """检查分辨率是否与任务类型兼容"""
+            valid_resolutions = {
+                "Create Image": ["4K", "2K", "1K"],
+                "Text to Video": ["1080p", "720p"],
+                "Frames to Video": ["1080p", "720p"],
+                "Ingredients to Video": ["1080p", "720p"]
+            }
+            if task_type not in valid_resolutions:
+                return False, f"未知任务类型: {task_type}"
+
+            allowed = valid_resolutions[task_type]
+            if resolution not in allowed:
+                return False, f"{task_type} 不支持分辨率 {resolution}，请使用: {', '.join(allowed)}"
+            return True, ""
+
         task_type_map = {
             "图片": "Create Image",
             "文生视频": "Text to Video",
@@ -598,6 +615,12 @@ class Api:
 
                     if not resolution:
                         resolution = "1080p" if "Video" in task_type else "4K"
+
+                    # 验证分辨率
+                    is_valid, error_msg = validate_resolution(task_type, resolution)
+                    if not is_valid:
+                        errors.append(f"行{row_idx}: {error_msg}")
+                        continue
 
                     reference_images = []
                     max_images = {
