@@ -23,6 +23,9 @@ if sys.platform == 'win32':
     if sys.stderr is not None and hasattr(sys.stderr, 'buffer'):
         sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
+    # 强制 pywebview 使用 WinRT 后端（避免 pythonnet/WinForms 依赖）
+    os.environ['PYWEBVIEW_BACKEND'] = 'winrt'
+
 from PIL import Image
 
 try:
