@@ -424,13 +424,18 @@ class WebSocketServer:
         self.task_manager.mark_client_idle(client_id)
 
     async def start(self):
-        self.server = await serve(
-            self.handler,
-            "localhost",
-            12345,
-            max_size=50 * 1024 * 1024
-        )
-        self.log("🚀 WebSocket服务器已启动: ws://localhost:12345")
+        try:
+            self.server = await serve(
+                self.handler,
+                "localhost",
+                12345,
+                max_size=50 * 1024 * 1024
+            )
+            self.log("🚀 WebSocket服务器已启动: ws://localhost:12345")
+        except OSError as e:
+            # 端口被占用
+            self.log(f"❌ 无法启动 WebSocket 服务器: {e}")
+            raise
 
     async def stop(self):
         if self.server:
@@ -804,9 +809,33 @@ def main():
     task_manager = TaskManager()
     api = Api(task_manager, loop)
 
-    # 启动 WebSocket 服务器
+    # 启动 WebSocket 服务器，捕获端口占用错误
     ws_server = WebSocketServer(task_manager)
-    asyncio.run_coroutine_threadsafe(ws_server.start(), loop)
+    ws_start_future = asyncio.run_coroutine_threadsafe(ws_server.start(), loop)
+
+    try:
+        # 等待 WebSocket 启动完成（超时 5 秒）
+        ws_start_future.result(timeout=5)
+    except OSError as e:
+        # 端口被占用，弹框提示用户
+        error_msg = f"无法启动应用！\n\nWebSocket 端口 12345 被占用\n\n{str(e)}\n\n请检查是否有其他程序占用该端口，或稍后重试。"
+        import tkinter as tk
+        from tkinter import messagebox
+        root = tk.Tk()
+        root.withdraw()  # 隐藏主窗口
+        messagebox.showerror("启动失败", error_msg)
+        root.destroy()
+        return
+    except Exception as e:
+        # 其他错误
+        error_msg = f"无法启动 WebSocket 服务器：\n\n{str(e)}"
+        import tkinter as tk
+        from tkinter import messagebox
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showerror("启动失败", error_msg)
+        root.destroy()
+        return
 
     # 确定 web 目录和 URL
     if getattr(sys, 'frozen', False):
