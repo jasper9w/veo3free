@@ -769,14 +769,20 @@ class Api:
         if Workbook is None:
             return
 
+        file_types = ('Excel文件 (*.xlsx)',)
         result = webview.windows[0].create_file_dialog(
             webview.SAVE_DIALOG,
+            file_types=file_types,
             save_filename='任务模板.xlsx'
         )
         if not result:
             return
 
         filepath = result if isinstance(result, str) else result[0]
+
+        # 确保有 .xlsx 扩展名
+        if not filepath.lower().endswith('.xlsx'):
+            filepath += '.xlsx'
 
         try:
             wb = Workbook()
