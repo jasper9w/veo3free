@@ -253,6 +253,31 @@ class ImageProcessor:
             logger.error(f"压缩图片失败: {e}")
             return None
 
+    @staticmethod
+    def generate_thumbnail(image_path, size=(200, 200)):
+        """生成缩略图，返回 base64"""
+        try:
+            img = Image.open(image_path)
+            # 转换为 RGB（处理 RGBA 等）
+            if img.mode in ('RGBA', 'LA', 'P'):
+                background = Image.new('RGB', img.size, (255, 255, 255))
+                if img.mode == 'P':
+                    img = img.convert('RGBA')
+                background.paste(img, mask=img.split()[-1] if img.mode in ('RGBA', 'LA') else None)
+                img = background
+            elif img.mode != 'RGB':
+                img = img.convert('RGB')
+
+            # 生成缩略图
+            img.thumbnail(size, Image.Resampling.LANCZOS)
+            buffer = io.BytesIO()
+            img.save(buffer, format='JPEG', quality=85, optimize=True)
+            buffer.seek(0)
+            return base64.b64encode(buffer.read()).decode('utf-8')
+        except Exception as e:
+            logger.error(f"生成缩略图失败: {e}")
+            return None
+
 
 class ImageDownloader:
     @staticmethod
@@ -264,7 +289,8 @@ class ImageDownloader:
             image_data = base64.b64decode(base64_data)
             with open(filepath, 'wb') as f:
                 f.write(image_data)
-            return filepath
+            # 返回绝对路径
+            return filepath.absolute()
         except Exception as e:
             logger.error(f"保存图片失败: {e}")
             return None
@@ -438,6 +464,16 @@ class Api:
         total, busy = self.task_manager.get_client_count()
         tasks_data = []
         for t in self.task_manager.tasks:
+            # 如果任务完成且有保存路径，生成缩略图
+            preview_base64 = None
+            if t['status'] == '已完成' and t.get('saved_path'):
+                try:
+                    # 只为图片生成缩略图（视频显示 icon 就可以）
+                    if t.get('file_ext') == '.png' or t.get('file_ext') == '.jpg':
+                        preview_base64 = ImageProcessor.generate_thumbnail(t['saved_path'], size=(200, 200))
+                except Exception:
+                    pass
+
             tasks_data.append({
                 'id': t['id'],
                 'prompt': t['prompt'],
@@ -449,7 +485,9 @@ class Api:
                 'saved_path': t.get('saved_path', ''),
                 'output_dir': t.get('output_dir', ''),
                 'start_time': t.get('start_time'),
-                'end_time': t.get('end_time')
+                'end_time': t.get('end_time'),
+                'file_ext': t.get('file_ext', ''),
+                'preview_base64': preview_base64
             })
         return {
             'client_count': total,
@@ -702,6 +740,29 @@ class Api:
     def open_output_dir(self):
         """打开输出目录"""
         self._open_directory(OUTPUT_DIR)
+
+    def open_task_file(self, task_index):
+        """打开任务的文件（不是文件夹）"""
+        if 0 <= task_index < len(self.task_manager.tasks):
+            task = self.task_manager.tasks[task_index]
+            saved_path = task.get('saved_path')
+            if saved_path and Path(saved_path).exists():
+                path = Path(saved_path)
+                # 直接打开文件
+                path_str = str(path.absolute())
+                system = platform.system()
+
+                if system == 'Windows':
+                    os.startfile(path_str)
+                elif system == 'Darwin':
+                    subprocess.run(['open', path_str])
+                else:
+                    subprocess.run(['xdg-open', path_str])
+            else:
+                # 文件不存在，打开所在目录
+                self.open_task_dir(task_index)
+        else:
+            self.open_output_dir()
 
     def open_task_dir(self, task_index):
         """打开任务的输出目录"""

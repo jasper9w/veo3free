@@ -14,6 +14,8 @@ interface Task {
   output_dir?: string;
   start_time?: string;
   end_time?: string;
+  file_ext?: string;
+  preview_base64?: string;
 }
 
 interface Status {
@@ -49,10 +51,9 @@ function formatDuration(startTime?: string, endTime?: string): string {
 interface TaskCardProps {
   task: Task;
   index: number;
-  onOpenDir: (index: number) => void;
 }
 
-function TaskCard({ task, index, onOpenDir }: TaskCardProps) {
+function TaskCard({ task, index }: TaskCardProps) {
   const [, setTick] = useState(0);
   const statusConfig: Record<string, { icon: React.ComponentType<{ className?: string }>; color: string; bg: string; text: string; label: string; animate?: boolean }> = {
     '已完成': { icon: Check, color: 'emerald', bg: 'bg-emerald-50', text: 'text-emerald-600', label: '已完成' },
@@ -75,20 +76,34 @@ function TaskCard({ task, index, onOpenDir }: TaskCardProps) {
   const StatusIcon = config.icon;
   const duration = formatDuration(task.start_time, task.end_time);
 
+  // 判断是否是图片或视频
+  const isImage = task.file_ext === '.png' || task.file_ext === '.jpg';
+  const isVideo = task.file_ext === '.mp4';
+  const hasPreview = task.status === '已完成' && task.saved_path;
+
+  // 点击打开文件
+  const handleClick = async () => {
+    if (hasPreview && typeof window !== 'undefined' && window.pywebview?.api) {
+      (window.pywebview.api as any).open_task_file(index);
+    }
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, x: -20 }}
       transition={{ delay: index * 0.03 }}
-      onDoubleClick={() => onOpenDir(index)}
-      className="group bg-white rounded-2xl p-4 shadow-sm hover:shadow-md transition-all duration-300 border border-zinc-100 cursor-pointer"
+      onClick={handleClick}
+      className={`group bg-white rounded-2xl p-4 shadow-sm hover:shadow-md transition-all duration-300 border border-zinc-100 ${hasPreview ? 'cursor-pointer' : 'cursor-default'}`}
     >
       <div className="flex items-start gap-4">
+        {/* Status Icon */}
         <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${config.bg}`}>
           <StatusIcon className={`w-5 h-5 ${config.text} ${config.animate ? 'animate-spin' : ''}`} />
         </div>
 
+        {/* Main Content */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
             <span className="text-xs px-2 py-0.5 rounded-full bg-violet-100 text-violet-600">
@@ -110,10 +125,34 @@ function TaskCard({ task, index, onOpenDir }: TaskCardProps) {
           {task.saved_path && (
             <p className="text-xs text-zinc-400 mt-2 flex items-center gap-1 truncate">
               <FolderOpen className="w-3 h-3 flex-shrink-0" />
-              {task.saved_path.split(/[/\\]/).pop()}
+              {task.saved_path}
             </p>
           )}
         </div>
+
+        {/* Preview Thumbnail on the right */}
+        {hasPreview && (
+          <div className="w-20 h-20 rounded-lg overflow-hidden border border-zinc-200 bg-zinc-100 flex-shrink-0 relative">
+            {isImage && task.preview_base64 && (
+              <img
+                src={`data:image/png;base64,${task.preview_base64}`}
+                alt="preview"
+                className="w-full h-full object-cover cursor-pointer hover:opacity-80 transition-opacity"
+              />
+            )}
+            {isVideo && task.saved_path && (
+              <>
+                <video
+                  src={`file://${task.saved_path}`}
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 flex items-center justify-center bg-black/20 hover:bg-black/30 transition-all pointer-events-none">
+                  <Film className="w-5 h-5 text-white" />
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
     </motion.div>
   );
@@ -186,6 +225,11 @@ function App() {
     await api.add_task(prompt.trim(), taskType, aspectRatio, resolution, refImages, '');
     setPrompt('');
     setRefImages([]);
+
+    // 添加任务后自动开始执行
+    setTimeout(() => {
+      api.start_execution();
+    }, 300);
   };
 
   const selectImages = async () => {
@@ -233,11 +277,6 @@ function App() {
   const handleOpenOutputDir = async () => {
     if (!ready || !api) return;
     await api.open_output_dir();
-  };
-
-  const handleOpenTaskDir = async (index: number) => {
-    if (!ready || !api) return;
-    await api.open_task_dir(index);
   };
 
   return (
@@ -569,7 +608,6 @@ function App() {
                       key={task.id}
                       task={task}
                       index={index}
-                      onOpenDir={handleOpenTaskDir}
                     />
                   ))
                 )}
