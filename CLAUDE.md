@@ -26,3 +26,6 @@ main.py通过DEV=1环境变量区分开发模式（使用vite dev server）和�
 
 ## 关于应用图标
 使用create_icon.py生成PNG图标，然后用iconutil转换为.icns格式。图标文件位于icons/目录
+
+## 绝对不可逾越的规则
+- python代码，任何时候都不适用emoji符号

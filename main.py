@@ -321,13 +321,13 @@ class WebSocketServer:
             data = json.loads(first_msg)
 
             if data.get('type') != 'register':
-                self.log(f"⚠️ 首条消息不是注册消息，断开连接")
+                self.log(f"[警告] 首条消息不是注册消息，断开连接")
                 return
 
             page_url = data.get('page_url', 'unknown')
             client_id, page_number = self.task_manager.register_client(websocket, page_url)
             total, busy = self.task_manager.get_client_count()
-            self.log(f"✅ 客户端注册: {client_id} (页面#{page_number})，当前连接数: {total}")
+            self.log(f"[OK] 客户端注册: {client_id} (页面#{page_number})，当前连接数: {total}")
 
             await websocket.send(json.dumps({
                 'type': 'register_success',
@@ -348,7 +348,7 @@ class WebSocketServer:
                         self.chunk_buffer[task_id] = {}
 
                     self.chunk_buffer[task_id][chunk_index] = chunk_data
-                    self.log(f"📥 [#{page_number}] 收到分块 {chunk_index + 1}/{total_chunks}")
+                    self.log(f"[收到] [#{page_number}] 收到分块 {chunk_index + 1}/{total_chunks}")
 
                     if len(self.chunk_buffer[task_id]) == total_chunks:
                         full_base64 = ''.join(
@@ -356,20 +356,20 @@ class WebSocketServer:
                             for i in range(total_chunks)
                         )
                         del self.chunk_buffer[task_id]
-                        self.log(f"✅ [#{page_number}] 分块合并完成，总大小: {len(full_base64) // 1024} KB")
+                        self.log(f"[OK] [#{page_number}] 分块合并完成，总大小: {len(full_base64) // 1024} KB")
                         await self.handle_image_result(client_id, task_id, full_base64)
 
                 elif msg_type == "image_data":
                     task_id = data.get("task_id")
                     image_data = data.get("data")
-                    self.log(f"📥 [#{page_number}] 收到图片数据，大小: {len(image_data) // 1024} KB")
+                    self.log(f"[收到] [#{page_number}] 收到图片数据，大小: {len(image_data) // 1024} KB")
                     await self.handle_image_result(client_id, task_id, image_data)
 
                 elif msg_type == "result":
                     task_id = data.get("task_id")
                     error = data.get("error")
                     if error:
-                        self.log(f"❌ [#{page_number}] 任务失败: {error}")
+                        self.log(f"[失败] [#{page_number}] 任务失败: {error}")
                         for task in self.task_manager.tasks:
                             if task['id'] == task_id:
                                 task['status'] = '失败'
@@ -380,7 +380,7 @@ class WebSocketServer:
 
                 elif msg_type == "status":
                     status_msg = data.get('message', '')
-                    self.log(f"📌 [#{page_number}] {status_msg}")
+                    self.log(f"[状态] [#{page_number}] {status_msg}")
                     task_id = self.task_manager.clients.get(client_id, {}).get('task_id')
                     if task_id:
                         self.task_manager.update_task_status_detail(task_id, status_msg)
@@ -391,7 +391,7 @@ class WebSocketServer:
             if client_id:
                 self.task_manager.remove_client(client_id)
                 total, busy = self.task_manager.get_client_count()
-                self.log(f"❌ 客户端断开: {client_id} (页面#{page_number})，当前连接数: {total}")
+                self.log(f"[断开] 客户端断开: {client_id} (页面#{page_number})，当前连接数: {total}")
 
     async def handle_image_result(self, client_id, task_id, base64_data):
         for task in self.task_manager.tasks:
@@ -423,11 +423,11 @@ class WebSocketServer:
                     task['end_time'] = datetime.now().isoformat()
                     task['saved_path'] = str(saved)
                     task['output_dir_path'] = str(output_dir)
-                    self.log(f"💾 已保存: {saved}")
+                    self.log(f"[保存] 已保存: {saved}")
                 else:
                     task['status'] = '下载失败'
                     task['end_time'] = datetime.now().isoformat()
-                    self.log(f"❌ 下载失败")
+                    self.log(f"[失败] 下载失败")
                 break
         self.task_manager.mark_client_idle(client_id)
 
@@ -439,10 +439,10 @@ class WebSocketServer:
                 12345,
                 max_size=50 * 1024 * 1024
             )
-            self.log("🚀 WebSocket服务器已启动: ws://localhost:12345")
+            self.log("WebSocket服务器已启动: ws://localhost:12345")
         except OSError as e:
             # 端口被占用
-            self.log(f"❌ 无法启动 WebSocket 服务器: {e}")
+            self.log(f"[错误] 无法启动 WebSocket 服务器: {e}")
             raise
 
     async def stop(self):
@@ -522,22 +522,22 @@ class Api:
 
     def stop_execution(self):
         self.task_manager.is_running = False
-        logger.info("⏹ 已停止执行")
+        logger.info("已停止执行")
 
     async def _execute_tasks(self):
-        logger.info("▶ 开始执行任务队列")
+        logger.info("开始执行任务队列")
 
         while self.task_manager.is_running:
             # 检查超时任务
             timeout_tasks = self.task_manager.check_timeout_tasks()
             for t in timeout_tasks:
-                logger.warning(f"⏰ 任务超时: {t['id']} - {t['prompt'][:30]}...")
+                logger.warning(f"任务超时: {t['id']} - {t['prompt'][:30]}...")
 
             task = self.task_manager.get_next_task()
             if not task:
                 has_busy = any(c['busy'] for c in self.task_manager.clients.values())
                 if not has_busy:
-                    logger.info("✅ 所有任务已完成")
+                    logger.info("所有任务已完成")
                     break
                 await asyncio.sleep(1)
                 continue
@@ -552,7 +552,7 @@ class Api:
             self.task_manager.mark_client_busy(client_id, task['id'])
             self.task_manager.current_index += 1
 
-            logger.info(f"📤 [{client_id}] 分配任务: {task['prompt'][:40]}...")
+            logger.info(f"[{client_id}] 分配任务: {task['prompt'][:40]}...")
 
             message = json.dumps({
                 'type': 'task',
@@ -567,7 +567,7 @@ class Api:
             try:
                 await client_info['ws'].send(message)
             except Exception as e:
-                logger.error(f"❌ [{client_id}] 发送失败: {e}")
+                logger.error(f"[{client_id}] 发送失败: {e}")
                 task['status'] = '等待中'
                 self.task_manager.mark_client_idle(client_id)
 
@@ -594,7 +594,7 @@ class Api:
             if base64_data:
                 images.append(base64_data)
                 size_kb = len(base64_data) * 3 / 4 / 1024
-                logger.info(f"✅ 已添加: {Path(filepath).name} (压缩后 ~{size_kb:.1f}KB)")
+                logger.info(f"已添加: {Path(filepath).name} (压缩后 ~{size_kb:.1f}KB)")
         return images
 
     def import_excel(self):
