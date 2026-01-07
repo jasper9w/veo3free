@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Play, Square, FolderOpen, FileSpreadsheet, X, Image, Film, Sparkles, Check, Loader2, Clock, AlertCircle, Plus, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -68,12 +68,11 @@ function TaskCard({ task, index }: TaskCardProps) {
     '超时': { icon: AlertCircle, color: 'orange', bg: 'bg-orange-50', text: 'text-orange-500', label: '超时' },
   };
 
-  // 处理中时每秒更新一次，刷新运行时间
+  // 处理中时每秒更新一次，刷新运行时间（只更新当前任务的 tick）
   useEffect(() => {
-    if (task.status === '处理中' && task.start_time) {
-      const timer = setInterval(() => setTick(t => t + 1), 1000);
-      return () => clearInterval(timer);
-    }
+    if (task.status !== '处理中' || !task.start_time) return;
+    const timer = setInterval(() => setTick(t => t + 1), 1000);
+    return () => clearInterval(timer);
   }, [task.status, task.start_time]);
 
   const config = statusConfig[task.status] || statusConfig['等待中'];
@@ -98,7 +97,7 @@ function TaskCard({ task, index }: TaskCardProps) {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, x: -20 }}
-      transition={{ delay: index * 0.03 }}
+      transition={{ duration: 0.2 }}
       onClick={handleClick}
       className={`group bg-white rounded-2xl p-4 shadow-sm hover:shadow-md transition-all duration-300 border border-zinc-100 ${hasPreview ? 'cursor-pointer' : 'cursor-default'}`}
     >
@@ -146,15 +145,9 @@ function TaskCard({ task, index }: TaskCardProps) {
               />
             )}
             {isVideo && task.saved_path && (
-              <>
-                <video
-                  src={`file://${task.saved_path}`}
-                  className="w-full h-full object-cover"
-                />
-                <div className="absolute inset-0 flex items-center justify-center bg-black/20 hover:bg-black/30 transition-all pointer-events-none">
-                  <Film className="w-5 h-5 text-white" />
-                </div>
-              </>
+              <div className="absolute inset-0 flex items-center justify-center bg-black/10">
+                <Film className="w-5 h-5 text-zinc-500" />
+              </div>
             )}
           </div>
         )}
@@ -178,9 +171,17 @@ function App() {
   const api = typeof window !== 'undefined' ? window.pywebview?.api : null;
 
   const resolutions = taskType === 'Create Image' ? ['2K', '4K'] : ['720p', '1080p'];
-  const completed = status.tasks.filter(t => t.status === '已完成').length;
-  const processing = status.tasks.filter(t => t.status === '处理中').length;
-  const progress = status.tasks.length ? (completed / status.tasks.length) * 100 : 0;
+
+  // 缓存任务统计，避免每次都重新计算
+  const { completed, processing, progress } = useMemo(() => {
+    const comp = status.tasks.filter(t => t.status === '已完成').length;
+    const proc = status.tasks.filter(t => t.status === '处理中').length;
+    return {
+      completed: comp,
+      processing: proc,
+      progress: status.tasks.length ? (comp / status.tasks.length) * 100 : 0
+    };
+  }, [status.tasks]);
 
   const selectedType = TASK_TYPES.find(t => t.id === taskType);
   const TypeIcon = selectedType?.icon || Image;
@@ -210,20 +211,24 @@ function App() {
     });
   }, []);
 
-  // 轮询状态
+  // 轮询状态（固定延迟 3s）
   useEffect(() => {
     if (!ready || !api) return;
+    let cancelled = false;
     const poll = async () => {
+      if (cancelled) return;
       try {
         const result = await api.get_status();
-        setStatus(result);
+        if (!cancelled) setStatus(result);
       } catch (e) {
         console.error('获取状态失败', e);
       }
+      if (!cancelled) {
+        setTimeout(poll, 3000);
+      }
     };
     poll();
-    const id = setInterval(poll, 500);
-    return () => clearInterval(id);
+    return () => { cancelled = true; };
   }, [ready, api]);
 
   // 任务类型变化时重置

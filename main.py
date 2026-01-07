@@ -441,6 +441,12 @@ class WebSocketServer:
                     task['end_time'] = datetime.now().isoformat()
                     task['saved_path'] = str(saved)
                     task['output_dir_path'] = str(output_dir)
+                    # 生成并缓存缩略图（只对图片生成）
+                    if task.get('file_ext') in ('.png', '.jpg'):
+                        try:
+                            task['preview_base64'] = ImageProcessor.generate_thumbnail(str(saved), size=(200, 200))
+                        except Exception:
+                            task['preview_base64'] = ''
                     self.log(f"[保存] 已保存: {saved}")
                 else:
                     task['status'] = '下载失败'
@@ -495,16 +501,6 @@ class Api:
         total, busy = self.task_manager.get_client_count()
         tasks_data = []
         for t in self.task_manager.tasks:
-            # 如果任务完成且有保存路径，生成缩略图
-            preview_base64 = None
-            if t['status'] == '已完成' and t.get('saved_path'):
-                try:
-                    # 只为图片生成缩略图（视频显示 icon 就可以）
-                    if t.get('file_ext') == '.png' or t.get('file_ext') == '.jpg':
-                        preview_base64 = ImageProcessor.generate_thumbnail(t['saved_path'], size=(200, 200))
-                except Exception:
-                    pass
-
             tasks_data.append({
                 'id': t['id'],
                 'prompt': t['prompt'],
@@ -518,7 +514,7 @@ class Api:
                 'start_time': t.get('start_time'),
                 'end_time': t.get('end_time'),
                 'file_ext': t.get('file_ext', ''),
-                'preview_base64': preview_base64
+                'preview_base64': t.get('preview_base64', '')
             })
         return {
             'client_count': total,
@@ -630,104 +626,111 @@ class Api:
 
         filepath = result[0]
 
-        # 验证分辨率和任务类型是否匹配
-        def validate_resolution(task_type, resolution):
-            """检查分辨率是否与任务类型兼容"""
-            valid_resolutions = {
-                "Create Image": ["4K", "2K", "1K"],
-                "Text to Video": ["1080p", "720p"],
-                "Frames to Video": ["1080p", "720p"],
-                "Ingredients to Video": ["1080p", "720p"]
+        # 在后台线程中处理 Excel，避免阻塞 UI
+        def process_excel():
+            # 验证分辨率和任务类型是否匹配
+            def validate_resolution(task_type, resolution):
+                """检查分辨率是否与任务类型兼容"""
+                valid_resolutions = {
+                    "Create Image": ["4K", "2K", "1K"],
+                    "Text to Video": ["1080p", "720p"],
+                    "Frames to Video": ["1080p", "720p"],
+                    "Ingredients to Video": ["1080p", "720p"]
+                }
+                if task_type not in valid_resolutions:
+                    return False, f"未知任务类型: {task_type}"
+
+                allowed = valid_resolutions[task_type]
+                if resolution not in allowed:
+                    return False, f"{task_type} 不支持分辨率 {resolution}，请使用: {', '.join(allowed)}"
+                return True, ""
+
+            task_type_map = {
+                "图片": "Create Image",
+                "文生视频": "Text to Video",
+                "首尾帧视频": "Frames to Video",
+                "多图视频": "Ingredients to Video"
             }
-            if task_type not in valid_resolutions:
-                return False, f"未知任务类型: {task_type}"
+            orientation_map = {
+                "横屏": "16:9",
+                "竖屏": "9:16"
+            }
 
-            allowed = valid_resolutions[task_type]
-            if resolution not in allowed:
-                return False, f"{task_type} 不支持分辨率 {resolution}，请使用: {', '.join(allowed)}"
-            return True, ""
+            errors = []
+            count = 0
 
-        task_type_map = {
-            "图片": "Create Image",
-            "文生视频": "Text to Video",
-            "首尾帧视频": "Frames to Video",
-            "多图视频": "Ingredients to Video"
-        }
-        orientation_map = {
-            "横屏": "16:9",
-            "竖屏": "9:16"
-        }
+            try:
+                wb = load_workbook(filepath)
+                ws = wb.active
 
-        errors = []
-        count = 0
-
-        try:
-            wb = load_workbook(filepath)
-            ws = wb.active
-
-            for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
-                if not row or not row[1]:
-                    continue
-
-                try:
-                    prompt = str(row[1]).strip() if row[1] else ""
-                    if not prompt:
+                for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+                    if not row or not row[1]:
                         continue
 
-                    task_type_cn = str(row[2]).strip() if len(row) > 2 and row[2] else "图片"
-                    orientation_cn = str(row[3]).strip() if len(row) > 3 and row[3] else "横屏"
-                    resolution = str(row[4]).strip() if len(row) > 4 and row[4] else ""
-                    output_dir = str(row[5]).strip() if len(row) > 5 and row[5] else None
+                    try:
+                        prompt = str(row[1]).strip() if row[1] else ""
+                        if not prompt:
+                            continue
 
-                    task_type = task_type_map.get(task_type_cn, "Create Image")
-                    aspect_ratio = orientation_map.get(orientation_cn, "16:9")
+                        task_type_cn = str(row[2]).strip() if len(row) > 2 and row[2] else "图片"
+                        orientation_cn = str(row[3]).strip() if len(row) > 3 and row[3] else "横屏"
+                        resolution = str(row[4]).strip() if len(row) > 4 and row[4] else ""
+                        output_dir = str(row[5]).strip() if len(row) > 5 and row[5] else None
 
-                    if not resolution:
-                        resolution = "1080p" if "Video" in task_type else "4K"
+                        task_type = task_type_map.get(task_type_cn, "Create Image")
+                        aspect_ratio = orientation_map.get(orientation_cn, "16:9")
 
-                    # 验证分辨率
-                    is_valid, error_msg = validate_resolution(task_type, resolution)
-                    if not is_valid:
-                        errors.append(f"行{row_idx}: {error_msg}")
-                        continue
+                        if not resolution:
+                            resolution = "1080p" if "Video" in task_type else "4K"
 
-                    reference_images = []
-                    max_images = {
-                        "Create Image": 8,
-                        "Frames to Video": 2,
-                        "Ingredients to Video": 3,
-                        "Text to Video": 0
-                    }.get(task_type, 8)
+                        # 验证分辨率
+                        is_valid, error_msg = validate_resolution(task_type, resolution)
+                        if not is_valid:
+                            errors.append(f"行{row_idx}: {error_msg}")
+                            continue
 
-                    for i in range(max_images):
-                        col_idx = 6 + i
-                        if len(row) > col_idx and row[col_idx]:
-                            img_path = str(row[col_idx]).strip()
-                            if img_path and Path(img_path).exists():
-                                base64_data = ImageProcessor.compress_image_to_base64(img_path)
-                                if base64_data:
-                                    reference_images.append(base64_data)
+                        reference_images = []
+                        max_images = {
+                            "Create Image": 8,
+                            "Frames to Video": 2,
+                            "Ingredients to Video": 3,
+                            "Text to Video": 0
+                        }.get(task_type, 8)
 
-                    task = self.task_manager.add_task(
-                        prompt=prompt,
-                        task_type=task_type,
-                        aspect_ratio=aspect_ratio,
-                        resolution=resolution,
-                        reference_images=reference_images,
-                        output_dir=output_dir
-                    )
-                    if task:
-                        count += 1
+                        for i in range(max_images):
+                            col_idx = 6 + i
+                            if len(row) > col_idx and row[col_idx]:
+                                img_path = str(row[col_idx]).strip()
+                                if img_path and Path(img_path).exists():
+                                    base64_data = ImageProcessor.compress_image_to_base64(img_path)
+                                    if base64_data:
+                                        reference_images.append(base64_data)
 
-                except Exception as e:
-                    errors.append(f"行{row_idx}: {str(e)}")
+                        task = self.task_manager.add_task(
+                            prompt=prompt,
+                            task_type=task_type,
+                            aspect_ratio=aspect_ratio,
+                            resolution=resolution,
+                            reference_images=reference_images,
+                            output_dir=output_dir
+                        )
+                        if task:
+                            count += 1
 
-            wb.close()
-            logger.info(f"从Excel导入 {count} 个任务")
-            return {'success': True, 'count': count, 'errors': errors}
+                    except Exception as e:
+                        errors.append(f"行{row_idx}: {str(e)}")
 
-        except Exception as e:
-            return {'success': False, 'count': 0, 'errors': [str(e)]}
+                wb.close()
+                logger.info(f"从Excel导入 {count} 个任务")
+
+            except Exception as e:
+                logger.error(f"Excel导入失败: {e}")
+
+        # 在后台线程执行导入，不阻塞 UI
+        thread = threading.Thread(target=process_excel, daemon=True)
+        thread.start()
+
+        return {'success': True, 'count': 0, 'errors': []}
 
     def export_template(self):
         """导出 Excel 模板"""
