@@ -211,7 +211,7 @@ function App() {
     });
   }, []);
 
-  // 轮询状态（固定延迟 3s）
+  // 轮询状态（固定延迟 1.5s）
   useEffect(() => {
     if (!ready || !api) return;
     let cancelled = false;
@@ -224,7 +224,7 @@ function App() {
         console.error('获取状态失败', e);
       }
       if (!cancelled) {
-        setTimeout(poll, 3000);
+        setTimeout(poll, 1500);
       }
     };
     poll();
@@ -266,16 +266,16 @@ function App() {
     const result = await api.import_excel();
     if (result) {
       if (result.success) {
-        const message = result.count > 0
-          ? `✅ 导入成功！添加了 ${result.count} 个任务`
-          : '⚠️ 没有有效的任务被导入';
-        alert(message);
-        if (result.errors && result.errors.length > 0) {
-          console.warn('导入警告:', result.errors);
-          alert(`⚠️ 部分行有问题:\n${result.errors.slice(0, 5).join('\n')}${result.errors.length > 5 ? '\n...' : ''}`);
+        if (result.count > 0) {
+          alert(`导入成功！添加了 ${result.count} 个任务`);
+        } else {
+          const errorMsg = result.errors && result.errors.length > 0
+            ? `没有有效的任务被导入\n\n原因:\n${result.errors.slice(0, 3).join('\n')}${result.errors.length > 3 ? '\n...' : ''}`
+            : '没有有效的任务被导入';
+          alert(errorMsg);
         }
       } else {
-        alert(`❌ 导入失败: ${result.errors?.[0] || '未知错误'}`);
+        alert(`导入失败: ${result.errors?.[0] || '未知错误'}`);
       }
     }
   };
