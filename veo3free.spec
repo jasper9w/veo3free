@@ -8,6 +8,7 @@ a = Analysis(
     binaries=[],
     datas=[
         ('web', 'web'),
+        ('guide', 'guide'),
     ],
     hiddenimports=[
         'PIL._tkinter_finder',
