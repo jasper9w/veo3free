@@ -96,7 +96,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: veo3free-windows
-          path: dist/veo3free/
+          path: dist/veo3free.exe
 
   release:
     needs: [build-macos, build-windows]
@@ -111,8 +111,7 @@ jobs:
       - name: Package Windows build
         run: |
           cd veo3free-windows
-          zip -r ../veo3free-windows.zip .
-          cd ..
+          zip -r ../veo3free-windows.zip veo3free.exe
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
