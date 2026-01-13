@@ -38,7 +38,6 @@ jobs:
       - name: Build macOS app
         run: |
           uv sync
-          uv run python sync_version.py
           uv run pyinstaller veo3free.spec --clean
 
       - name: Create DMG
@@ -89,7 +88,6 @@ jobs:
       - name: Build Windows exe
         run: |
           uv sync
-          uv run python sync_version.py
           uv run pyinstaller veo3free.spec --clean
 
       - name: Upload Windows build

@@ -24,10 +24,6 @@ main.py通过DEV=1环境变量区分开发模式（使用vite dev server）和�
 ## 关于打包应用
 打包后的.app内部是只读文件系统，不能在内部创建文件。输出目录和日志目录必须使用用户可写位置（如~/Documents/应用名）
 
-## 关于版本号管理
-版本号只在pyproject.toml中维护。打包前必须运行 `uv run python sync_version.py` 同步版本号到version.py。
-完整打包命令: `uv run python sync_version.py && uv run pyinstaller veo3free.spec --clean`
-
 ## 关于应用图标
 使用create_icon.py生成PNG图标，然后用iconutil转换为.icns格式。图标文件位于icons/目录
 
