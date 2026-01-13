@@ -1145,7 +1145,7 @@ def main():
 
     # 启动 webview
     logger.info("启动 webview 主循环...")
-    webview.start()
+    webview.start(gui='qt')
 
     # 清理
     logger.info("正在关闭应用...")

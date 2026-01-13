@@ -5,7 +5,7 @@ from pathlib import Path
 
 APP_NAME = "veo3free"
 GITHUB_REPO = "jasper9w/veo3free"
-__version__ = "1.0.8"
+__version__ = "1.0.9"
 
 
 def get_version() -> str:

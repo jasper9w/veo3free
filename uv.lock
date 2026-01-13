@@ -745,19 +745,19 @@ wheels = [
 
 [[package]]
 name = "pyqt6"
-version = "6.10.1"
+version = "6.10.2"
 source = { registry = "https://pypi.tuna.tsinghua.edu.cn/simple" }
 dependencies = [
     { name = "pyqt6-qt6" },
     { name = "pyqt6-sip" },
 ]
-sdist = { url = "https://pypi.tuna.tsinghua.edu.cn/packages/5c/f5/530b553ea1e239704c5ba86e9e6dd09e4b6240c5b4ee0567d7a135e8466a/pyqt6-6.10.1.tar.gz", hash = "sha256:d733a6c712c0b7a7b99e4ad59b211ea25a5d1b9d1131e47a1f50b5e524266e57", size = 1085250, upload-time = "2025-12-06T09:56:00.439Z" }
+sdist = { url = "https://pypi.tuna.tsinghua.edu.cn/packages/96/03/e756f52e8b0d7bb5527baf8c46d59af0746391943bdb8655acba22ee4168/pyqt6-6.10.2.tar.gz", hash = "sha256:6c0db5d8cbb9a3e7e2b5b51d0ff3f283121fa27b864db6d2f35b663c9be5cc83", size = 1085573, upload-time = "2026-01-08T16:40:00.244Z" }
 wheels = [
-    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/c8/b6/de44a5e229a1b0e91c997e8d4083636f4c17f6cc740e12c7ae468fe223b9/pyqt6-6.10.1-cp39-abi3-macosx_10_14_universal2.whl", hash = "sha256:3c32d738c3fe7434e9008c6aed2897742952a0634383fe5fabaf390139a7726e", size = 60244259, upload-time = "2025-12-06T09:55:38.297Z" },
-    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/41/76/df4b4b268595032d0fae863e4d4ad962b541db01b1bb6d12f2bc9c66b74b/pyqt6-6.10.1-cp39-abi3-manylinux_2_34_x86_64.whl", hash = "sha256:46aee0453606097ba35645806fb8cb4019d3825781ff94c5070da7f97bb243d8", size = 37899217, upload-time = "2025-12-06T09:55:42.95Z" },
-    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/c8/8b/28695ac012bdb1e40358970bd4e688a3a1e4de8ced0e672688ad8c577ffb/pyqt6-6.10.1-cp39-abi3-manylinux_2_39_aarch64.whl", hash = "sha256:d2f4c3475d1660c343061e64724fccd1e44ec00017f1c89625660de1855a9beb", size = 40748244, upload-time = "2025-12-06T09:55:51.686Z" },
-    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/7e/87/465ea8df9936190c133671e07370e17a0fa8fa55308c8742e544cdf3556c/pyqt6-6.10.1-cp39-abi3-win_amd64.whl", hash = "sha256:9cc63abb4136f9c71b39381874ca37ba2b8b920085828497176f3ef50fb72ac2", size = 26015164, upload-time = "2025-12-06T09:55:55.183Z" },
-    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/62/6d/fa34a34b1a8b26a1b603face529b4c085eaf6347910b19026b7e6782b714/pyqt6-6.10.1-cp39-abi3-win_arm64.whl", hash = "sha256:b943c2c2b0890db203b1af72714490afa8870b372ceb935cad70877a4e57c0c8", size = 26208188, upload-time = "2025-12-06T09:55:58.382Z" },
+    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/fb/3f/f073a980969aa485ef288eb2e3b94c223ba9c7ac9941543f19b51659b98d/pyqt6-6.10.2-cp39-abi3-macosx_10_14_universal2.whl", hash = "sha256:37ae7c1183fe4dd0c6aefd2006a35731245de1cb6f817bb9e414a3e4848dfd6d", size = 60244482, upload-time = "2026-01-08T16:38:50.837Z" },
+    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/ec/3e/9a015651ec71cea2e2f960c37edeb21623ba96a74956c0827def837f7c6b/pyqt6-6.10.2-cp39-abi3-manylinux_2_34_x86_64.whl", hash = "sha256:78e1b3d5763e4cbc84485aef600e0aba5e1932fd263b716f92cd1a40dfa5e924", size = 37899440, upload-time = "2026-01-08T16:39:09.027Z" },
+    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/51/74/a88fec2b99700270ca5d7dc7d650236a4990ed6fc88e055ca0fc8a339ee3/pyqt6-6.10.2-cp39-abi3-manylinux_2_39_aarch64.whl", hash = "sha256:bbc3af541bbecd27301bfe69fe445aa1611a9b490bd3de77306b12df632f7ec6", size = 40748467, upload-time = "2026-01-08T16:39:29.551Z" },
+    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/75/34/be7a55529607b21db00a49ca53cb07c3092d2a5a95ea19bb95cfa0346904/pyqt6-6.10.2-cp39-abi3-win_amd64.whl", hash = "sha256:bd328cb70bc382c48861cd5f0a11b2b8ae6f5692d5a2d6679ba52785dced327b", size = 26015391, upload-time = "2026-01-08T16:39:42.946Z" },
+    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/af/de/d9c88f976602b7884fec4ad54a4575d48e23e4f390e5357ea83917358846/pyqt6-6.10.2-cp39-abi3-win_arm64.whl", hash = "sha256:7901ba1df024b7ee9fdacfb2b7661aeb3749ae8b0bef65428077de3e0450eabb", size = 26208415, upload-time = "2026-01-08T16:39:57.751Z" },
 ]
 
 [[package]]
@@ -794,6 +794,38 @@ wheels = [
     { url = "https://pypi.tuna.tsinghua.edu.cn/packages/1f/43/0a648469a7e4f07df1c4ad6443f892e55631f24f7af30c7c946e458a82d1/pyqt6_sip-13.10.3-cp314-cp314-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:3286a98e93608d51048e9046f557117424c8366be266b33ff852ee54ffa7b9bf", size = 324062, upload-time = "2025-12-06T13:19:40.308Z" },
     { url = "https://pypi.tuna.tsinghua.edu.cn/packages/f3/0d/67d2095a932c007210437318c31fbc8376deb4e4491907861c4b9ac4ad9e/pyqt6_sip-13.10.3-cp314-cp314-win_amd64.whl", hash = "sha256:4fc6229ba7276266e3805b5517e7413cba79538f0c3ce7d2042a2027a90f99cf", size = 55076, upload-time = "2025-12-06T13:19:42.61Z" },
     { url = "https://pypi.tuna.tsinghua.edu.cn/packages/f8/cd/f121be0271dc73d54f3580584103c046a8d2c06a2686b594b77fd677a5ef/pyqt6_sip-13.10.3-cp314-cp314-win_arm64.whl", hash = "sha256:efef47667ca009557d7ecf985b15f0bf440584fd634ee0eab19ec296effc7cca", size = 49464, upload-time = "2025-12-06T13:19:43.638Z" },
+]
+
+[[package]]
+name = "pyqt6-webengine"
+version = "6.10.0"
+source = { registry = "https://pypi.tuna.tsinghua.edu.cn/simple" }
+dependencies = [
+    { name = "pyqt6" },
+    { name = "pyqt6-sip" },
+    { name = "pyqt6-webengine-qt6" },
+]
+sdist = { url = "https://pypi.tuna.tsinghua.edu.cn/packages/5f/5d/355dfe41246c611e861a1e88b43173b57c1b56a550bea12cfeaafbc7e6b6/pyqt6_webengine-6.10.0.tar.gz", hash = "sha256:267d27275d0c79ae270bca4b03520a41fa7e85c2a4d9632da8cb9cc233a55ad1", size = 37053, upload-time = "2025-10-22T12:08:54.709Z" }
+wheels = [
+    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/7b/d6/dd16a44378deecaeea747eb85c3cb816ac5bc30ea8622d647588415f57ad/pyqt6_webengine-6.10.0-1-cp39-abi3-manylinux_2_34_x86_64.whl", hash = "sha256:95dc3c0c36c0e4eb4024e4fdbcfa1c5593a88e16de1563431a422084bec26974", size = 1305797, upload-time = "2025-10-24T18:33:34.249Z" },
+    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/10/33/93edafa15fb76d1949adf9a035676c074bd8c4335f81ea1e1f20a7c47f68/pyqt6_webengine-6.10.0-cp39-abi3-macosx_10_14_universal2.whl", hash = "sha256:13d25cb332f553f7e811532e34bd82c811590b5fef553926b13c854548523112", size = 2374354, upload-time = "2025-10-22T12:08:48.249Z" },
+    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/0a/43/bfb9b8faa50f6b94d34881303777225b255a081f95df1b177002598ef22b/pyqt6_webengine-6.10.0-cp39-abi3-manylinux_2_34_x86_64.whl", hash = "sha256:9911b7b3995bc1cff8fec142c2817ee0bbdbaea18b94aebaa6bc23e13941d0b2", size = 1336461, upload-time = "2025-10-22T12:08:50.038Z" },
+    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/16/6d/0964bc6674f00f1a8161f3c2d26ce1507b73b5a09361c204002b1a32512d/pyqt6_webengine-6.10.0-cp39-abi3-manylinux_2_39_aarch64.whl", hash = "sha256:cd2c24ab5ee9142fc34b8a21e12255dcf61bdc15aff3eccd00b1cb91a1b1fbf8", size = 1430142, upload-time = "2025-10-22T12:08:51.318Z" },
+    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/7d/2f/3239e1f5a6c063937a8a4c6ad7f4899367d20bc7ee3f655c54b11ca7096e/pyqt6_webengine-6.10.0-cp39-abi3-win_amd64.whl", hash = "sha256:3794edbefd62ae95cd5e760b7a91b7b6473e83b635ad3f3c4a78e58c95e1e460", size = 866181, upload-time = "2025-10-22T12:08:52.484Z" },
+    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/d0/e9/6567e64cf5716f3c475495201b991407ad2ee01125199f60f45271925152/pyqt6_webengine-6.10.0-cp39-abi3-win_arm64.whl", hash = "sha256:65e74dbe7a3a0c746e7ec68718f1937368cb10c1f8a242335577f6710f8f94bd", size = 861061, upload-time = "2025-10-22T12:08:53.731Z" },
+]
+
+[[package]]
+name = "pyqt6-webengine-qt6"
+version = "6.10.1"
+source = { registry = "https://pypi.tuna.tsinghua.edu.cn/simple" }
+wheels = [
+    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/7e/43/74b238c03741848b0ef0323e2a1b5c10e783b251b1e8dc006e35ea7db91a/pyqt6_webengine_qt6-6.10.1-py3-none-macosx_10_14_x86_64.whl", hash = "sha256:2709583bc9be99dd523fe7157ce018a35e1e4206a7e0008274f126c12ecd79d1", size = 122712662, upload-time = "2025-11-27T14:27:08.122Z" },
+    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/09/d4/22c079e19319c73558f7f1b869b6cb952549e4599a9342b5cda84e97ebba/pyqt6_webengine_qt6-6.10.1-py3-none-macosx_11_0_arm64.whl", hash = "sha256:e1d5f46e90259d02e809dbf9c3e57f58c64da260f8abdad9530e5b5444184306", size = 109529132, upload-time = "2025-11-27T14:27:56.16Z" },
+    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/47/75/e678f19d4913d12837dd94b50e66e3f41ad87522b4ae328b11b3edf0997a/pyqt6_webengine_qt6-6.10.1-py3-none-manylinux_2_34_x86_64.whl", hash = "sha256:ca1404eb035e3343fc1b88bd418f47fed4fe907012812788902598783c582901", size = 113905746, upload-time = "2025-11-27T14:28:45.491Z" },
+    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/8a/27/6be0c921777ec5db9548edfb1f891f53166f85db63e532ef0d8ba124da71/pyqt6_webengine_qt6-6.10.1-py3-none-manylinux_2_39_aarch64.whl", hash = "sha256:76545e9b104802140db344c7bb513a8d732e80f68dc16d158f7fb11feaa28eaa", size = 109504644, upload-time = "2025-11-27T14:29:33.403Z" },
+    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/35/6d/ee4a1008b8137d392ee3c4cd3816e00cd60fbb645b0aafa88923d96c1176/pyqt6_webengine_qt6-6.10.1-py3-none-win_amd64.whl", hash = "sha256:5a572b7f96edc98e457e652c380f9c605e1112532723932fa01d2625f331121e", size = 130615208, upload-time = "2025-11-27T14:30:38.142Z" },
+    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/e2/ae/e7bd509ea026cc6c9ac0435a5fb7dbc182279094f10c488d59a774354aec/pyqt6_webengine_qt6-6.10.1-py3-none-win_arm64.whl", hash = "sha256:50b8f2be23b4989abb6f62b19f7ca80dd4f1d48e46e954ba63fd4d5de3ef856e", size = 112832551, upload-time = "2025-11-27T14:31:28.191Z" },
 ]
 
 [[package]]
@@ -871,7 +903,7 @@ wheels = [
 
 [[package]]
 name = "veo3free"
-version = "1.0.8"
+version = "1.0.9"
 source = { virtual = "." }
 dependencies = [
     { name = "aiohttp" },
@@ -880,7 +912,9 @@ dependencies = [
     { name = "pillow" },
     { name = "pyinstaller" },
     { name = "pyqt6" },
+    { name = "pyqt6-webengine" },
     { name = "pywebview" },
+    { name = "qtpy" },
     { name = "websockets" },
 ]
 
@@ -891,8 +925,10 @@ requires-dist = [
     { name = "openpyxl", specifier = ">=3.1.5" },
     { name = "pillow", specifier = ">=11.1.0" },
     { name = "pyinstaller", specifier = ">=6.12.0" },
-    { name = "pyqt6", specifier = ">=6.10.1" },
+    { name = "pyqt6", specifier = ">=6.10.2" },
+    { name = "pyqt6-webengine", specifier = ">=6.10.0" },
     { name = "pywebview", specifier = ">=6.1" },
+    { name = "qtpy", specifier = ">=2.4.3" },
     { name = "websockets", specifier = ">=15.0.1" },
 ]
 
