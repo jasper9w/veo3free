@@ -516,10 +516,10 @@ class WebSocketServer:
             self.server = await serve(
                 self.handler,
                 "localhost",
-                12345,
+                12343,
                 max_size=50 * 1024 * 1024
             )
-            self.log("WebSocket服务器已启动: ws://localhost:12345")
+            self.log("WebSocket服务器已启动: ws://localhost:12343")
         except OSError as e:
             # 端口被占用
             self.log("[错误] 无法启动 WebSocket 服务器")
@@ -1043,7 +1043,7 @@ def main():
         ws_start_future.result(timeout=5)
     except OSError:
         # 端口被占用，弹框提示用户
-        error_msg = "无法启动应用!\n\nWebSocket 端口 12345 被占用\n\n请检查是否有其他程序占用该端口，或稍后重试。"
+        error_msg = "无法启动应用!\n\nWebSocket 端口 12343 被占用\n\n请检查是否有其他程序占用该端口，或稍后重试。"
         import tkinter as tk
         from tkinter import messagebox
         root = tk.Tk()

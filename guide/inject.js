@@ -170,8 +170,8 @@
         }
 
         updateButton('连接中...', '#ffc107');
-        console.log('连接 ws://localhost:12345');
-        ws = new WebSocket('ws://localhost:12345');
+        console.log('连接 ws://localhost:12343');
+        ws = new WebSocket('ws://localhost:12343');
 
         ws.onopen = () => {
             console.log('连接成功，发送注册');
