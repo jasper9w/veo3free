@@ -9,7 +9,9 @@
 
 ## 使用步骤
 1. 安装和启动本程序
-2. 浏览器安装辅助脚本（基于油猴插件，故请先配置油猴），https://greasyfork.org/zh-CN/scripts/561650-flow2ui
-3. 浏览器打开 https://labs.google/fx/tools/flow 登录有flow权限的google账号
+2. 点击程序右上角的添加连接按钮，进入连接建立向导，按指引完成操作
 
-然后就可以开始使用了
+## 注意事项
+1. 浏览器打开 https://labs.google/fx/tools/flow 登录有flow权限的google账号
+2. 请确保google账号的首选语言为英文。操作步骤为：打开https://myaccount.google.com/personal-infoA，然后以此选择：语言->编辑(铅笔图标)->选择English->选择United States->保存
+
