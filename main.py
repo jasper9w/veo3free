@@ -19,6 +19,10 @@ from pathlib import Path
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from functools import partial
 
+# 定义端口常量
+WEBSOCKET_PORT = 12343
+GUIDE_SERVER_PORT = 12346
+
 # Windows 下设置输出编码为 UTF-8
 if sys.platform == 'win32':
     if sys.stdout is not None and hasattr(sys.stdout, 'buffer'):
@@ -356,7 +360,7 @@ class ImageDownloader:
 class GuideServer:
     """引导页面 HTTP 服务器"""
 
-    def __init__(self, port=12346):
+    def __init__(self, port=GUIDE_SERVER_PORT):
         self.port = port
         self.server = None
         self.thread = None
@@ -538,10 +542,10 @@ class WebSocketServer:
             self.server = await serve(
                 self.handler,
                 "localhost",
-                12343,
+                WEBSOCKET_PORT,
                 max_size=50 * 1024 * 1024
             )
-            logger.info("WebSocket 服务器已启动: ws://localhost:12345")
+            logger.info(f"WebSocket 服务器已启动: ws://localhost:{WEBSOCKET_PORT}")
         except OSError as e:
             # 端口被占用
             logger.error("WebSocket 服务器启动失败 (端口占用)")
@@ -1075,7 +1079,7 @@ def main():
 
     # 启动 WebSocket 服务器，捕获端口占用错误
     ws_server = WebSocketServer(task_manager)
-    logger.info("正在启动 WebSocket 服务器 (端口 12345)...")
+    logger.info(f"正在启动 WebSocket 服务器 (端口 {WEBSOCKET_PORT})...")
     ws_start_future = asyncio.run_coroutine_threadsafe(ws_server.start(), loop)
 
     try:
@@ -1085,7 +1089,7 @@ def main():
     except OSError as e:
         # 端口被占用，弹框提示用户
         logger.error(f"WebSocket 服务器启动失败 (端口占用): {e}")
-        error_msg = "无法启动应用!\n\nWebSocket 端口 12345 被占用\n\n请检查是否有其他程序占用该端口，或稍后重试。"
+        error_msg = f"无法启动应用!\n\nWebSocket 端口 {WEBSOCKET_PORT} 被占用\n\n请检查是否有其他程序占用该端口，或稍后重试。"
         import tkinter as tk
         from tkinter import messagebox
         root = tk.Tk()
@@ -1106,8 +1110,8 @@ def main():
         return
 
     # 启动引导页面服务
-    logger.info("正在启动引导页面服务 (端口 12346)...")
-    guide_server = GuideServer(port=12346)
+    logger.info(f"正在启动引导页面服务 (端口 {GUIDE_SERVER_PORT})...")
+    guide_server = GuideServer(port=GUIDE_SERVER_PORT)
     if guide_server.start():
         logger.info("引导页面服务启动成功")
     else:
