@@ -16,7 +16,7 @@ import threading
 import webbrowser
 from datetime import datetime
 from pathlib import Path
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import HTTPServer, SimpleHTTPRequestHandler, ThreadingHTTPServer
 from functools import partial
 
 # 定义端口常量
@@ -378,7 +378,7 @@ class GuideServer:
 
         try:
             handler = partial(SimpleHTTPRequestHandler, directory=str(guide_dir))
-            self.server = HTTPServer(('localhost', self.port), handler)
+            self.server = ThreadingHTTPServer(('localhost', self.port), handler)
             self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
             self.thread.start()
             logger.info(f"引导页面服务已启动: http://localhost:{self.port}")
@@ -390,7 +390,11 @@ class GuideServer:
     def stop(self):
         """停止 HTTP 服务器"""
         if self.server:
+            logger.info("正在停止引导页面服务...")
             self.server.shutdown()
+            self.server.server_close()  # 确保服务器套接字被关闭
+            if self.thread and self.thread.is_alive():
+                self.thread.join(timeout=2)  # 等待最多2秒让线程结束
             logger.info("引导页面服务已停止")
 
 
