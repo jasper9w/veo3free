@@ -54,6 +54,8 @@ export interface PyWebViewApi {
   open_update_page: (url: string) => Promise<boolean>;
   open_guide_page: () => Promise<void>;
   open_logs_dir: () => Promise<void>;
+  retry_task: (task_index: number) => Promise<{ success: boolean; error?: string }>;
+  retry_all_failed: () => Promise<{ success: boolean; count?: number; error?: string }>;
 }
 
 declare global {

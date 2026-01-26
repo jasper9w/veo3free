@@ -382,6 +382,68 @@ class Api:
             return {'success': True}
         return {'success': False, 'error': '添加失败'}
 
+    def retry_task(self, task_index: int) -> dict:
+        """重试失败的任务"""
+        if task_index < 0 or task_index >= len(self.task_manager.tasks):
+            return {'success': False, 'error': '任务索引无效'}
+        
+        task = self.task_manager.tasks[task_index]
+        if task['status'] not in ('失败', '超时', '下载失败'):
+            return {'success': False, 'error': '只能重试失败的任务'}
+        
+        # 重置任务状态
+        task['status'] = '等待中'
+        task['status_detail'] = ''
+        task['start_time'] = None
+        task['end_time'] = None
+        task['client_id'] = None
+        
+        # 如果当前执行索引已经超过这个任务，需要回退
+        if self.task_manager.current_index > task_index:
+            self.task_manager.current_index = task_index
+        
+        logger.info(f"任务已重置为等待中: {task['id']}")
+        
+        # 如果执行已停止，自动启动
+        if not self.task_manager.is_running:
+            self.start_execution()
+        
+        return {'success': True}
+
+    def retry_all_failed(self) -> dict:
+        """重试所有失败的任务"""
+        failed_indices = []
+        for i, task in enumerate(self.task_manager.tasks):
+            if task['status'] in ('失败', '超时', '下载失败'):
+                failed_indices.append(i)
+        
+        if not failed_indices:
+            return {'success': False, 'error': '没有失败的任务'}
+        
+        # 重置所有失败任务
+        min_index = len(self.task_manager.tasks)
+        for i in failed_indices:
+            task = self.task_manager.tasks[i]
+            task['status'] = '等待中'
+            task['status_detail'] = ''
+            task['start_time'] = None
+            task['end_time'] = None
+            task['client_id'] = None
+            if i < min_index:
+                min_index = i
+        
+        # 回退执行索引到最早的失败任务
+        if self.task_manager.current_index > min_index:
+            self.task_manager.current_index = min_index
+        
+        logger.info(f"已重置 {len(failed_indices)} 个失败任务")
+        
+        # 如果执行已停止，自动启动
+        if not self.task_manager.is_running:
+            self.start_execution()
+        
+        return {'success': True, 'count': len(failed_indices)}
+
     def get_status(self):
         total, busy = self.task_manager.get_client_count()
         tasks_data = []

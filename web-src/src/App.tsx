@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Play, Square, FolderOpen, FileSpreadsheet, X, Image, Film, Sparkles, Check, Loader2, Clock, AlertCircle, Plus, ChevronDown } from 'lucide-react';
+import { Play, Square, FolderOpen, FileSpreadsheet, X, Image, Film, Sparkles, Check, Loader2, Clock, AlertCircle, Plus, ChevronDown, RotateCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { UpdateModal } from './components/UpdateModal';
 import { UpdateStatusBar } from './components/UpdateStatusBar';
@@ -55,10 +55,12 @@ function formatDuration(startTime?: string, endTime?: string): string {
 interface TaskCardProps {
   task: Task;
   index: number;
+  onRetry?: (index: number) => void;
 }
 
-function TaskCard({ task, index }: TaskCardProps) {
+function TaskCard({ task, index, onRetry }: TaskCardProps) {
   const [, setTick] = useState(0);
+  const [retrying, setRetrying] = useState(false);
   const statusConfig: Record<string, { icon: React.ComponentType<{ className?: string }>; color: string; bg: string; text: string; label: string; animate?: boolean }> = {
     '已完成': { icon: Check, color: 'emerald', bg: 'bg-emerald-50', text: 'text-emerald-600', label: '已完成' },
     '处理中': { icon: Loader2, color: 'blue', bg: 'bg-blue-50', text: 'text-blue-600', label: task.status_detail || '处理中', animate: true },
@@ -83,11 +85,24 @@ function TaskCard({ task, index }: TaskCardProps) {
   const isImage = task.file_ext === '.png' || task.file_ext === '.jpg';
   const isVideo = task.file_ext === '.mp4';
   const hasPreview = task.status === '已完成' && task.saved_path;
+  const canRetry = ['失败', '超时', '下载失败'].includes(task.status);
 
   // 点击打开文件
   const handleClick = async () => {
     if (hasPreview && typeof window !== 'undefined' && window.pywebview?.api) {
       (window.pywebview.api as any).open_task_file(index);
+    }
+  };
+
+  // 重试任务
+  const handleRetry = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (retrying || !onRetry) return;
+    setRetrying(true);
+    try {
+      await onRetry(index);
+    } finally {
+      setRetrying(false);
     }
   };
 
@@ -132,6 +147,18 @@ function TaskCard({ task, index }: TaskCardProps) {
             </p>
           )}
         </div>
+
+        {/* Retry Button for failed tasks */}
+        {canRetry && onRetry && (
+          <button
+            onClick={handleRetry}
+            disabled={retrying}
+            className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 bg-orange-50 hover:bg-orange-100 transition-colors disabled:opacity-50"
+            title="重试"
+          >
+            <RotateCw className={`w-5 h-5 text-orange-600 ${retrying ? 'animate-spin' : ''}`} />
+          </button>
+        )}
 
         {/* Preview Thumbnail on the right */}
         {hasPreview && (
@@ -180,15 +207,37 @@ function App() {
     : (aspectRatio === '9:16' ? ['720p'] : ['720p', '1080p']);
 
   // 缓存任务统计，避免每次都重新计算
-  const { completed, processing, progress } = useMemo(() => {
+  const { completed, processing, failed, progress } = useMemo(() => {
     const comp = status.tasks.filter(t => t.status === '已完成').length;
     const proc = status.tasks.filter(t => t.status === '处理中').length;
+    const fail = status.tasks.filter(t => ['失败', '超时', '下载失败'].includes(t.status)).length;
     return {
       completed: comp,
       processing: proc,
+      failed: fail,
       progress: status.tasks.length ? (comp / status.tasks.length) * 100 : 0
     };
   }, [status.tasks]);
+
+  // 重试单个任务
+  const handleRetryTask = async (index: number) => {
+    if (!api) return;
+    try {
+      await api.retry_task(index);
+    } catch (e) {
+      console.error('重试任务失败:', e);
+    }
+  };
+
+  // 重试所有失败任务
+  const handleRetryAllFailed = async () => {
+    if (!api) return;
+    try {
+      await api.retry_all_failed();
+    } catch (e) {
+      console.error('重试所有失败任务失败:', e);
+    }
+  };
 
   const selectedType = TASK_TYPES.find(t => t.id === taskType);
   const TypeIcon = selectedType?.icon || Image;
@@ -691,7 +740,18 @@ function App() {
               <div className="bg-white rounded-2xl p-4 shadow-sm border border-zinc-100">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm text-zinc-600">总体进度</span>
-                  <span className="text-sm font-medium text-zinc-900">{completed} / {status.tasks.length}</span>
+                  <div className="flex items-center gap-3">
+                    {failed > 0 && (
+                      <button
+                        onClick={handleRetryAllFailed}
+                        className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-orange-600 bg-orange-50 hover:bg-orange-100 rounded-lg transition-colors"
+                      >
+                        <RotateCw className="w-3.5 h-3.5" />
+                        重试失败 ({failed})
+                      </button>
+                    )}
+                    <span className="text-sm font-medium text-zinc-900">{completed} / {status.tasks.length}</span>
+                  </div>
                 </div>
                 <div className="h-2 bg-zinc-100 rounded-full overflow-hidden">
                   <motion.div
@@ -725,6 +785,7 @@ function App() {
                       key={task.id}
                       task={task}
                       index={index}
+                      onRetry={handleRetryTask}
                     />
                   ))
                 )}
