@@ -1,6 +1,6 @@
 [project]
 name = "veo3free"
-version = "1.1.12"
+version = "1.1.14"
 description = "Veo3 free generation tool"
 readme = "README.md"
 requires-python = ">=3.12"
