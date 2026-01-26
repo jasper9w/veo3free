@@ -15,6 +15,31 @@
     let statusBtn = null;
     let overlayMask = null;
 
+    function getServerOrigin() {
+        // 从 inject.js 的 src 推导服务端 origin（避免硬编码端口）
+        let src = '';
+        try {
+            src = (document.currentScript && document.currentScript.src) ? document.currentScript.src : '';
+        } catch (e) {
+            src = '';
+        }
+        if (!src) {
+            const scripts = Array.from(document.getElementsByTagName('script'));
+            const hit = scripts.map(s => s.src).find(u => u && u.indexOf('/inject.js') >= 0);
+            src = hit || '';
+        }
+        try {
+            return new URL(src).origin;
+        } catch (e) {
+            return 'http://localhost:12346';
+        }
+    }
+
+    function toWsUrl(origin) {
+        const wsOrigin = origin.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:');
+        return wsOrigin + '/ws';
+    }
+
     // 检查是否在 project 页面
     function isProjectPage() {
         return /^https:\/\/labs\.google\/fx\/tools\/flow\/project\/.+/.test(location.href);
@@ -170,8 +195,9 @@
         }
 
         updateButton('连接中...', '#ffc107');
-        console.log('连接 ws://localhost:12343');
-        ws = new WebSocket('ws://localhost:12343');
+        const wsUrl = toWsUrl(getServerOrigin());
+        console.log('连接 ' + wsUrl);
+        ws = new WebSocket(wsUrl);
 
         ws.onopen = () => {
             console.log('连接成功，发送注册');

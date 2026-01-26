@@ -1,4 +1,4 @@
-import { Loader2, AlertCircle, FileText } from 'lucide-react';
+import { Loader2, AlertCircle, FileText, Key } from 'lucide-react';
 import type { SystemInfo, UpdateInfo } from '../types';
 
 interface UpdateStatusBarProps {
@@ -7,6 +7,7 @@ interface UpdateStatusBarProps {
   updateInfo: UpdateInfo | null;
   onCheckUpdate: () => void;
   onOpenLogs: () => void;
+  onOpenApiVerify: () => void;
 }
 
 export function UpdateStatusBar({
@@ -15,6 +16,7 @@ export function UpdateStatusBar({
   updateInfo,
   onCheckUpdate,
   onOpenLogs,
+  onOpenApiVerify,
 }: UpdateStatusBarProps) {
   if (!systemInfo) return null;
 
@@ -44,14 +46,24 @@ export function UpdateStatusBar({
         </button>
         <span className="select-text cursor-text">{systemInfo.userAgent}</span>
       </div>
-      <button
-        onClick={onOpenLogs}
-        className="flex items-center gap-1 text-violet-600 hover:text-violet-700 transition-colors"
-        title="打开日志目录"
-      >
-        <FileText className="w-3 h-3" />
-        <span>调试日志</span>
-      </button>
+      <div className="flex items-center gap-3">
+        <button
+          onClick={onOpenApiVerify}
+          className="flex items-center gap-1 text-blue-600 hover:text-blue-700 transition-colors"
+          title="API 接入"
+        >
+          <Key className="w-3 h-3" />
+          <span>API 接入</span>
+        </button>
+        <button
+          onClick={onOpenLogs}
+          className="flex items-center gap-1 text-violet-600 hover:text-violet-700 transition-colors"
+          title="打开日志目录"
+        >
+          <FileText className="w-3 h-3" />
+          <span>调试日志</span>
+        </button>
+      </div>
     </footer>
   );
 }

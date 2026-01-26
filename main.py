@@ -16,12 +16,6 @@ import threading
 import webbrowser
 from datetime import datetime
 from pathlib import Path
-from http.server import HTTPServer, SimpleHTTPRequestHandler, ThreadingHTTPServer
-from functools import partial
-
-# 定义端口常量
-WEBSOCKET_PORT = 12343
-GUIDE_SERVER_PORT = 12346
 
 # Windows 下设置输出编码为 UTF-8
 if sys.platform == 'win32':
@@ -49,12 +43,6 @@ except ImportError:
     load_workbook = None
 
 try:
-    from websockets.server import serve
-except ImportError:
-    print("请安装 websockets: pip install websockets")
-    sys.exit(1)
-
-try:
     import webview
 except ImportError:
     print("请安装 pywebview: pip install pywebview")
@@ -62,6 +50,15 @@ except ImportError:
 
 from version import get_version
 from updater import check_for_updates, open_download_page
+from api_server_fastapi import OpenAIAPICompatServer, API_SERVER_PORT
+import api_server_fastapi as api_server_module
+
+try:
+    from PJYSDK import PJYSDK
+    PJYSDK_AVAILABLE = True
+except ImportError:
+    PJYSDK_AVAILABLE = False
+    logger.warning("PJYSDK 未安装，API 验证功能不可用")
 
 # 确定输出目录位置
 if getattr(sys, 'frozen', False):
@@ -357,215 +354,17 @@ class ImageDownloader:
             return None
 
 
-class GuideServer:
-    """引导页面 HTTP 服务器"""
-
-    def __init__(self, port=GUIDE_SERVER_PORT):
-        self.port = port
-        self.server = None
-        self.thread = None
-
-    def start(self):
-        """启动 HTTP 服务器"""
-        if getattr(sys, 'frozen', False):
-            guide_dir = Path(sys._MEIPASS) / 'guide'
-        else:
-            guide_dir = Path(__file__).parent / 'guide'
-
-        if not guide_dir.exists():
-            logger.warning(f"引导页面目录不存在: {guide_dir}")
-            return False
-
-        try:
-            handler = partial(SimpleHTTPRequestHandler, directory=str(guide_dir))
-            self.server = ThreadingHTTPServer(('localhost', self.port), handler)
-            self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
-            self.thread.start()
-            logger.info(f"引导页面服务已启动: http://localhost:{self.port}")
-            return True
-        except OSError as e:
-            logger.error(f"启动引导页面服务失败: {e}")
-            return False
-
-    def stop(self):
-        """停止 HTTP 服务器"""
-        if self.server:
-            logger.info("正在停止引导页面服务...")
-            self.server.shutdown()
-            self.server.server_close()  # 确保服务器套接字被关闭
-            if self.thread and self.thread.is_alive():
-                self.thread.join(timeout=2)  # 等待最多2秒让线程结束
-            logger.info("引导页面服务已停止")
-
-
-class WebSocketServer:
-    def __init__(self, task_manager):
-        self.task_manager = task_manager
-        self.server = None
-        self.chunk_buffer = {}
-
-    def log(self, message):
-        logger.info(message)
-
-    async def handler(self, websocket):
-        client_id = None
-        page_number = None
-        try:
-            first_msg = await websocket.recv()
-            data = json.loads(first_msg)
-
-            if data.get('type') != 'register':
-                self.log(f"[警告] 首条消息不是注册消息，断开连接")
-                return
-
-            page_url = data.get('page_url', 'unknown')
-            client_id, page_number = self.task_manager.register_client(websocket, page_url)
-            total, busy = self.task_manager.get_client_count()
-            self.log(f"[OK] 客户端注册: {client_id} (页面#{page_number})，当前连接数: {total}")
-
-            await websocket.send(json.dumps({
-                'type': 'register_success',
-                'client_id': client_id
-            }))
-
-            async for message in websocket:
-                data = json.loads(message)
-                msg_type = data.get("type")
-
-                if msg_type == "image_chunk":
-                    task_id = data.get("task_id")
-                    chunk_index = data.get("chunk_index")
-                    total_chunks = data.get("total_chunks")
-                    chunk_data = data.get("data")
-
-                    if task_id not in self.chunk_buffer:
-                        self.chunk_buffer[task_id] = {}
-
-                    self.chunk_buffer[task_id][chunk_index] = chunk_data
-                    self.log(f"[收到] [#{page_number}] 收到分块 {chunk_index + 1}/{total_chunks}")
-
-                    if len(self.chunk_buffer[task_id]) == total_chunks:
-                        full_base64 = ''.join(
-                            self.chunk_buffer[task_id][i]
-                            for i in range(total_chunks)
-                        )
-                        del self.chunk_buffer[task_id]
-                        self.log(f"[OK] [#{page_number}] 分块合并完成，总大小: {len(full_base64) // 1024} KB")
-                        await self.handle_image_result(client_id, task_id, full_base64)
-
-                elif msg_type == "image_data":
-                    task_id = data.get("task_id")
-                    image_data = data.get("data")
-                    self.log(f"[收到] [#{page_number}] 收到图片数据，大小: {len(image_data) // 1024} KB")
-                    await self.handle_image_result(client_id, task_id, image_data)
-
-                elif msg_type == "result":
-                    task_id = data.get("task_id")
-                    error = data.get("error")
-                    if error:
-                        self.log(f"[失败] [#{page_number}] 任务失败: {error}")
-                        for task in self.task_manager.tasks:
-                            if task['id'] == task_id:
-                                task['status'] = '失败'
-                                task['status_detail'] = error
-                                task['end_time'] = datetime.now().isoformat()
-                                break
-                    self.task_manager.mark_client_idle(client_id)
-
-                elif msg_type == "status":
-                    status_msg = data.get('message', '')
-                    self.log(f"[状态] [#{page_number}] {status_msg}")
-                    task_id = self.task_manager.clients.get(client_id, {}).get('task_id')
-                    if task_id:
-                        self.task_manager.update_task_status_detail(task_id, status_msg)
-
-        except Exception as e:
-            self.log("连接异常")
-            log_error_to_file("WebSocket连接异常", e)
-        finally:
-            if client_id:
-                self.task_manager.remove_client(client_id)
-                total, busy = self.task_manager.get_client_count()
-                self.log(f"[断开] 客户端断开: {client_id} (页面#{page_number})，当前连接数: {total}")
-
-    async def handle_image_result(self, client_id, task_id, base64_data):
-        for task in self.task_manager.tasks:
-            if task['id'] == task_id:
-                output_dir = task.get('output_dir')
-                if output_dir:
-                    if not Path(output_dir).is_absolute():
-                        output_dir = OUTPUT_DIR / output_dir
-                    else:
-                        output_dir = Path(output_dir)
-                else:
-                    output_dir = OUTPUT_DIR
-                output_dir.mkdir(parents=True, exist_ok=True)
-
-                file_ext = task.get('file_ext', '.png')
-
-                # 如果是导入任务，使用行号作为文件名（不论是否设置输出文件夹）
-                if task.get('import_row_number'):
-                    filename = f"{task['import_row_number']}{file_ext}"
-                    filepath = output_dir / filename
-                else:
-                    # 普通任务使用时间戳
-                    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-                    filename = f"{timestamp}{file_ext}"
-                    filepath = output_dir / filename
-
-                    # 避免重名
-                    counter = 1
-                    while filepath.exists():
-                        filename = f"{timestamp}_{counter}{file_ext}"
-                        filepath = output_dir / filename
-                        counter += 1
-
-                # 保存文件
-                saved = await ImageDownloader.save_base64_image(base64_data, filename, output_dir)
-                if saved:
-                    task['status'] = '已完成'
-                    task['end_time'] = datetime.now().isoformat()
-                    task['saved_path'] = str(saved)
-                    task['output_dir_path'] = str(output_dir)
-                    # 生成并缓存缩略图（只对图片生成）
-                    if task.get('file_ext') in ('.png', '.jpg'):
-                        try:
-                            task['preview_base64'] = ImageProcessor.generate_thumbnail(str(saved), size=(200, 200))
-                        except Exception:
-                            task['preview_base64'] = ''
-                    logger.info(f"任务完成: {task_id} -> {saved}")
-                else:
-                    task['status'] = '下载失败'
-                    task['end_time'] = datetime.now().isoformat()
-                    logger.error(f"任务保存失败: {task_id}")
-                break
-        self.task_manager.mark_client_idle(client_id)
-
-    async def start(self):
-        try:
-            self.server = await serve(
-                self.handler,
-                "localhost",
-                WEBSOCKET_PORT,
-                max_size=50 * 1024 * 1024
-            )
-            logger.info(f"WebSocket 服务器已启动: ws://localhost:{WEBSOCKET_PORT}")
-        except OSError as e:
-            # 端口被占用
-            logger.error("WebSocket 服务器启动失败 (端口占用)")
-            log_error_to_file("WebSocket服务器启动失败", e)
-            raise
-
-    async def stop(self):
-        if self.server:
-            self.server.close()
-            await self.server.wait_closed()
+"""
+说明：
+- 原先的引导页服务（12346）与 WebSocket 服务（12343）已合并进 FastAPI（12346）
+- 具体实现见：server/guide_routes.py 与 server/ws_routes.py
+"""
 
 
 class Api:
     """暴露给前端的 API"""
 
-    def __init__(self, task_manager, loop):
+    def __init__(self, task_manager, loop=None):
         self.task_manager = task_manager
         self.loop = loop
 
@@ -610,6 +409,9 @@ class Api:
         }
 
     def start_execution(self):
+        if self.loop is None:
+            logger.warning("启动执行失败: 后端事件循环未就绪")
+            return
         total, _ = self.task_manager.get_client_count()
         if total == 0:
             logger.warning("启动执行失败: 没有连接的客户端")
@@ -619,7 +421,14 @@ class Api:
             return
         self.task_manager.is_running = True
         logger.info(f"启动任务执行: 客户端数={total}, 任务数={len(self.task_manager.tasks)}")
-        asyncio.run_coroutine_threadsafe(self._execute_tasks(), self.loop)
+        try:
+            running = asyncio.get_running_loop()
+        except RuntimeError:
+            running = None
+        if running is not None and running is self.loop:
+            asyncio.create_task(self._execute_tasks())
+        else:
+            asyncio.run_coroutine_threadsafe(self._execute_tasks(), self.loop)
 
     def stop_execution(self):
         self.task_manager.is_running = False
@@ -643,8 +452,17 @@ class Api:
                 await asyncio.sleep(1)
                 continue
 
+            # 检查是否有客户端连接
+            total, busy = self.task_manager.get_client_count()
+            if total == 0:
+                # 没有客户端连接，等待客户端连接
+                logger.info("没有客户端连接，等待客户端连接...")
+                await asyncio.sleep(2)  # 等待时间稍长一些
+                continue
+
             client_id, client_info = self.task_manager.get_idle_client()
             if not client_info:
+                # 所有客户端都忙碌，等待空闲客户端
                 await asyncio.sleep(1)
                 continue
 
@@ -1046,7 +864,7 @@ class Api:
 
     def open_guide_page(self) -> bool:
         """在外部浏览器中打开引导页面"""
-        guide_url = "http://localhost:12346"
+        guide_url = f"http://localhost:{API_SERVER_PORT}/guide"
         logger.info(f"打开引导页面: {guide_url}")
         try:
             webbrowser.open(guide_url)
@@ -1055,12 +873,118 @@ class Api:
             logger.error(f"打开引导页面失败: {e}")
             return False
 
+    def _get_settings_path(self) -> Path:
+        """获取配置文件路径：~/veo3free/settings.json"""
+        return Path.home() / "veo3free" / "settings.json"
 
-def run_async_loop(loop):
-    asyncio.set_event_loop(loop)
-    loop.run_forever()
+    def _load_settings(self) -> dict:
+        """加载配置文件"""
+        settings_path = self._get_settings_path()
+        if settings_path.exists():
+            try:
+                return json.loads(settings_path.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+        return {}
 
+    def _save_settings(self, settings: dict) -> bool:
+        """保存配置文件"""
+        settings_path = self._get_settings_path()
+        try:
+            settings_path.parent.mkdir(parents=True, exist_ok=True)
+            settings_path.write_text(json.dumps(settings, ensure_ascii=False, indent=2), encoding="utf-8")
+            return True
+        except Exception as e:
+            logger.warning(f"保存配置文件失败: {e}")
+            return False
 
+    def _get_persistent_device_id(self) -> str:
+        """获取持久化的设备 ID，首次启动时生成随机 UUID 并保存"""
+        import uuid
+
+        settings = self._load_settings()
+
+        # 已有 device_id 则直接返回
+        if settings.get("device_id"):
+            return settings["device_id"]
+
+        # 首次启动，生成随机 UUID
+        device_id = str(uuid.uuid4()).replace("-", "")
+        settings["device_id"] = device_id
+        self._save_settings(settings)
+
+        return device_id
+
+    def get_api_verify_status(self) -> dict:
+        """获取 API 验证状态"""
+        settings = self._load_settings()
+        if settings.get("api_verified") and settings.get("api_token"):
+            api_key = None
+            if hasattr(self, '_api_server') and self._api_server:
+                api_key = self._api_server.api_key
+            return {
+                'verified': True,
+                'api_key': api_key,
+                'docs_url': f'http://localhost:{API_SERVER_PORT}/docs'
+            }
+        return {'verified': False}
+
+    def verify_pjy_card(self, card: str) -> dict:
+        """验证泡椒云卡密"""
+        if not PJYSDK_AVAILABLE:
+            return {
+                'success': False,
+                'error': 'PJYSDK 未安装，验证功能不可用'
+            }
+
+        try:
+            import uuid
+            import hashlib
+
+            app_key = 'd5rg9r3dqussfksagchg'
+            app_secret = 'hCDOnEu6G66CThuxJG2BMXmjfN9wGRQ6'
+
+            pjysdk = PJYSDK(app_key=app_key, app_secret=app_secret)
+            pjysdk.debug = False
+
+            device_id = self._get_persistent_device_id()
+            pjysdk.set_device_id(device_id)
+            pjysdk.set_card(card)
+
+            ret = pjysdk.card_login()
+            if ret.code == 0:
+                token = ret.result.token
+                logger.info(f"泡椒云验证成功: token={token[:20]}...")
+                
+                # 保存验证状态
+                settings = self._load_settings()
+                settings["api_card"] = card
+                settings["api_verified"] = True
+                settings["api_token"] = token
+                self._save_settings(settings)
+                
+                api_key = None
+                if hasattr(self, '_api_server') and self._api_server:
+                    api_key = self._api_server.api_key
+                return {
+                    'success': True,
+                    'token': token,
+                    'api_key': api_key,
+                    'docs_url': f'http://localhost:{API_SERVER_PORT}/docs'
+                }
+            else:
+                logger.warning(f"泡椒云验证失败: {ret.message}")
+                return {
+                    'success': False,
+                    'error': ret.message or '验证失败'
+                }
+        except Exception as e:
+            logger.error(f"泡椒云验证异常: {e}")
+            log_error_to_file("泡椒云验证异常", e)
+            return {
+                'success': False,
+                'error': f'验证异常: {str(e)}'
+            }
 def main():
     # 启动日志
     logger.info("=" * 50)
@@ -1072,54 +996,34 @@ def main():
     logger.info(f"日志目录: {LOGS_DIR}")
     logger.info("=" * 50)
 
-    # 创建事件循环
-    loop = asyncio.new_event_loop()
-    thread = threading.Thread(target=run_async_loop, args=(loop,), daemon=True)
-    thread.start()
-
     # 创建任务管理器和 API
     task_manager = TaskManager()
-    api = Api(task_manager, loop)
+    api = Api(task_manager)
 
-    # 启动 WebSocket 服务器，捕获端口占用错误
-    ws_server = WebSocketServer(task_manager)
-    logger.info(f"正在启动 WebSocket 服务器 (端口 {WEBSOCKET_PORT})...")
-    ws_start_future = asyncio.run_coroutine_threadsafe(ws_server.start(), loop)
-
+    # 启动 OpenAI API 兼容服务器（同时承载 guide 与 WebSocket）
+    logger.info(f"正在启动 OpenAI API 服务器 (端口 {API_SERVER_PORT})...")
     try:
-        # 等待 WebSocket 启动完成（超时 5 秒）
-        ws_start_future.result(timeout=5)
-        logger.info("WebSocket 服务器启动成功")
-    except OSError as e:
-        # 端口被占用，弹框提示用户
-        logger.error(f"WebSocket 服务器启动失败 (端口占用): {e}")
-        error_msg = f"无法启动应用!\n\nWebSocket 端口 {WEBSOCKET_PORT} 被占用\n\n请检查是否有其他程序占用该端口，或稍后重试。"
-        import tkinter as tk
-        from tkinter import messagebox
-        root = tk.Tk()
-        root.withdraw()  # 隐藏主窗口
-        messagebox.showerror("启动失败", error_msg)
-        root.destroy()
-        return
-    except Exception as e:
-        # 其他错误
-        logger.error(f"WebSocket 服务器启动失败: {e}")
-        error_msg = "无法启动 WebSocket 服务器，请稍后重试。"
-        import tkinter as tk
-        from tkinter import messagebox
-        root = tk.Tk()
-        root.withdraw()
-        messagebox.showerror("启动失败", error_msg)
-        root.destroy()
-        return
-
-    # 启动引导页面服务
-    logger.info(f"正在启动引导页面服务 (端口 {GUIDE_SERVER_PORT})...")
-    guide_server = GuideServer(port=GUIDE_SERVER_PORT)
-    if guide_server.start():
-        logger.info("引导页面服务启动成功")
+        logger.info(f"API server module: {Path(api_server_module.__file__).resolve()}")
+    except Exception:
+        logger.info("API server module: <unknown>")
+    api_server = OpenAIAPICompatServer(
+        task_manager, output_dir=OUTPUT_DIR, port=API_SERVER_PORT, api_instance=api
+    )
+    # 让 Api 可以访问 api_server 以获取 api_key
+    api._api_server = api_server
+    if api_server.start():
+        logger.info(f"OpenAI API 服务器启动成功: http://localhost:{API_SERVER_PORT}")
+        logger.info(f"文件访问端点: http://localhost:{API_SERVER_PORT}/files/<task_id>")
+        logger.info(f"引导页面: http://localhost:{API_SERVER_PORT}/guide")
+        logger.info(f"WebSocket: ws://localhost:{API_SERVER_PORT}/ws")
     else:
-        logger.warning("引导页面服务启动失败")
+        logger.warning("OpenAI API 服务器启动失败")
+
+    # 等待 FastAPI loop 就绪后，注入到 Api 里用于任务调度
+    if api_server.wait_ready(timeout_seconds=5.0) and api_server.loop is not None:
+        api.loop = api_server.loop
+    else:
+        logger.warning("FastAPI 事件循环未就绪，任务调度可能不可用")
 
     # 确定 web 目录和 URL
     if getattr(sys, 'frozen', False):
@@ -1157,9 +1061,7 @@ def main():
 
     # 清理
     logger.info("正在关闭应用...")
-    guide_server.stop()
-    asyncio.run_coroutine_threadsafe(ws_server.stop(), loop)
-    loop.call_soon_threadsafe(loop.stop)
+    api_server.stop()
     logger.info("应用已退出")
 
 

@@ -322,7 +322,7 @@
                                 <polyline points="8 7 12 3 16 7"></polyline>
                             </svg>
                         </div>
-                        <a href="javascript:(function(){if(window.__flow3free_loaded){console.log('flow3free already loaded');return;}window.__flow3free_loaded=true;var s=document.createElement('script');s.src='http://localhost:12346/inject.js?t='+Date.now();s.onerror=function(){console.error('Failed to load inject.js');window.__flow3free_loaded=false;};document.body.appendChild(s);})();"
+                        <a id="bookmarkletLink" href="javascript:void(0)"
                            class="bookmarklet-button-inline" draggable="true" title="拖拽此按钮到书签栏">
                             veo3free
                         </a>
@@ -383,6 +383,15 @@
 </div>
 
 <script>
+    // 动态生成书签脚本地址（从当前引导页的 origin 推导出 inject.js 的地址）
+    (function setupBookmarklet() {
+        const el = document.getElementById('bookmarkletLink');
+        if (!el) return;
+        const origin = window.location.origin;
+        const js = `javascript:(function(){if(window.__flow3free_loaded){console.log('flow3free already loaded');return;}window.__flow3free_loaded=true;var s=document.createElement('script');s.src='${origin}/inject.js?t='+Date.now();s.onerror=function(){console.error('Failed to load inject.js');window.__flow3free_loaded=false;};document.body.appendChild(s);})();`;
+        el.setAttribute('href', js);
+    })();
+
     // 检测浏览器
     function detectBrowser() {
         const ua = navigator.userAgent;

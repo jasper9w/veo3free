@@ -3,6 +3,7 @@ import { Play, Square, FolderOpen, FileSpreadsheet, X, Image, Film, Sparkles, Ch
 import { motion, AnimatePresence } from 'framer-motion';
 import { UpdateModal } from './components/UpdateModal';
 import { UpdateStatusBar } from './components/UpdateStatusBar';
+import { ApiVerifyModal } from './components/ApiVerifyModal';
 import type { SystemInfo, UpdateInfo } from './types';
 
 interface Task {
@@ -168,6 +169,8 @@ function App() {
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [showApiVerifyModal, setShowApiVerifyModal] = useState(false);
+  const [apiVerifyStatus, setApiVerifyStatus] = useState<{ verified: boolean; api_key?: string; docs_url?: string } | null>(null);
 
   const api = typeof window !== 'undefined' ? window.pywebview?.api : null;
 
@@ -205,10 +208,10 @@ function App() {
     check();
   }, []);
 
-  // 从后端获取版本号
+  // 从后端获取版本号和 API 验证状态
   useEffect(() => {
     if (!ready || !api) return;
-    const fetchVersion = async () => {
+    const fetchData = async () => {
       try {
         const version = await api.get_app_version();
         setSystemInfo({
@@ -221,8 +224,16 @@ function App() {
           userAgent: navigator.userAgent,
         });
       }
+
+      // 检查 API 验证状态
+      try {
+        const status = await (api as any).get_api_verify_status();
+        setApiVerifyStatus(status);
+      } catch {
+        // 忽略错误
+      }
     };
-    fetchVersion();
+    fetchData();
   }, [ready, api]);
 
   // 轮询状态（固定延迟 1.5s）
@@ -730,6 +741,7 @@ function App() {
         updateInfo={updateInfo}
         onCheckUpdate={() => checkForUpdate(true)}
         onOpenLogs={handleOpenLogsDir}
+        onOpenApiVerify={() => setShowApiVerifyModal(true)}
       />
 
       {/* Update Modal */}
@@ -738,6 +750,32 @@ function App() {
         updateInfo={updateInfo}
         onClose={() => setShowUpdateModal(false)}
         onDownload={handleOpenDownload}
+      />
+
+      {/* API Verify Modal */}
+      <ApiVerifyModal
+        isOpen={showApiVerifyModal}
+        onClose={() => setShowApiVerifyModal(false)}
+        initialStatus={apiVerifyStatus || undefined}
+        onVerify={async (card: string) => {
+          if (!api) {
+            return { success: false, error: 'API 未就绪' };
+          }
+          try {
+            const result = await (api as any).verify_pjy_card(card);
+            if (result.success) {
+              // 更新验证状态
+              setApiVerifyStatus({
+                verified: true,
+                api_key: result.api_key,
+                docs_url: result.docs_url,
+              });
+            }
+            return result;
+          } catch (error) {
+            return { success: false, error: error instanceof Error ? error.message : '验证失败' };
+          }
+        }}
       />
     </div>
   );

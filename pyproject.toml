@@ -10,9 +10,16 @@ dependencies = [
     "pillow>=11.1.0",
     "openpyxl>=3.1.5",
     "loguru>=0.7.3",
-    "pywebview>=6.1",
+    "pywebview>=5.3",
     "pyinstaller>=6.12.0",
     "pyqt6>=6.10.2",
     "pyqt6-webengine>=6.10.0",
     "qtpy>=2.4.3",
+    "fastapi>=0.128.0",
+    "uvicorn>=0.40.0",
+    "requests>=2.32.5",
 ]
+
+[[tool.uv.index]]
+url = "https://pypi.org/simple"
+default = true
