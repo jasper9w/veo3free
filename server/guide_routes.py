@@ -22,6 +22,7 @@ def register_guide_routes(app: FastAPI) -> None:
     guide_dir = _get_guide_dir()
     index_path = guide_dir / "index.html"
     inject_path = guide_dir / "inject.js"
+    api_docs_path = guide_dir / "api-docs.html"
 
     @app.get("/", include_in_schema=False)
     async def root():
@@ -39,4 +40,10 @@ def register_guide_routes(app: FastAPI) -> None:
         if not inject_path.exists():
             logger.warning(f"[guide] missing: {inject_path}")
         return FileResponse(str(inject_path), media_type="application/javascript")
+
+    @app.get("/api-docs", include_in_schema=False)
+    async def api_docs():
+        if not api_docs_path.exists():
+            logger.warning(f"[guide] missing: {api_docs_path}")
+        return FileResponse(str(api_docs_path))
 

@@ -915,16 +915,27 @@ class Api:
 
         return device_id
 
+    def _get_or_create_api_key(self) -> str:
+        """获取或创建 API 密钥"""
+        import secrets
+        settings = self._load_settings()
+        
+        if settings.get("api_key"):
+            return settings["api_key"]
+        
+        # 生成新的 API 密钥
+        api_key = "vf-" + secrets.token_urlsafe(24)
+        settings["api_key"] = api_key
+        self._save_settings(settings)
+        return api_key
+
     def get_api_verify_status(self) -> dict:
         """获取 API 验证状态"""
         settings = self._load_settings()
-        if settings.get("api_verified") and settings.get("api_token"):
-            api_key = None
-            if hasattr(self, '_api_server') and self._api_server:
-                api_key = self._api_server.api_key
+        if settings.get("api_verified"):
             return {
                 'verified': True,
-                'api_key': api_key,
+                'api_key': settings.get("api_key"),
                 'docs_url': f'http://localhost:{API_SERVER_PORT}/docs'
             }
         return {'verified': False}
@@ -954,22 +965,23 @@ class Api:
             ret = pjysdk.card_login()
             if ret.code == 0:
                 token = ret.result.token
-                logger.info(f"泡椒云验证成功: token={token[:20]}...")
+                logger.info(f"验证成功: token={token[:20]}...")
                 
                 # 保存验证状态
                 settings = self._load_settings()
                 settings["api_card"] = card
                 settings["api_verified"] = True
                 settings["api_token"] = token
+                # 确保有 api_key
+                if not settings.get("api_key"):
+                    import secrets
+                    settings["api_key"] = "vf-" + secrets.token_urlsafe(24)
                 self._save_settings(settings)
                 
-                api_key = None
-                if hasattr(self, '_api_server') and self._api_server:
-                    api_key = self._api_server.api_key
                 return {
                     'success': True,
                     'token': token,
-                    'api_key': api_key,
+                    'api_key': settings["api_key"],
                     'docs_url': f'http://localhost:{API_SERVER_PORT}/docs'
                 }
             else:
@@ -1000,6 +1012,9 @@ def main():
     task_manager = TaskManager()
     api = Api(task_manager)
 
+    # 获取或创建 API 密钥
+    api_key = api._get_or_create_api_key()
+
     # 启动 OpenAI API 兼容服务器（同时承载 guide 与 WebSocket）
     logger.info(f"正在启动 OpenAI API 服务器 (端口 {API_SERVER_PORT})...")
     try:
@@ -1007,9 +1022,9 @@ def main():
     except Exception:
         logger.info("API server module: <unknown>")
     api_server = OpenAIAPICompatServer(
-        task_manager, output_dir=OUTPUT_DIR, port=API_SERVER_PORT, api_instance=api
+        task_manager, output_dir=OUTPUT_DIR, port=API_SERVER_PORT, api_key=api_key, api_instance=api
     )
-    # 让 Api 可以访问 api_server 以获取 api_key
+    # 让 Api 可以访问 api_server
     api._api_server = api_server
     if api_server.start():
         logger.info(f"OpenAI API 服务器启动成功: http://localhost:{API_SERVER_PORT}")

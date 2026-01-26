@@ -147,10 +147,29 @@ export function ApiVerifyModal({
           </>
         ) : result.success ? (
           <>
-            <div className="mb-4">
+            <div className="mb-4 max-h-[60vh] overflow-y-auto">
               <div className="flex items-center gap-2 mb-3 p-3 bg-emerald-50 rounded-xl">
                 <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0" />
                 <span className="text-sm text-emerald-700 font-medium">验证成功</span>
+              </div>
+
+              {/* 接入地址 */}
+              <div className="mb-3">
+                <label className="block text-xs font-medium text-zinc-600 mb-1.5">
+                  接入地址
+                </label>
+                <div className="flex items-center gap-2 p-2.5 bg-zinc-50 rounded-lg border border-zinc-200">
+                  <code className="flex-1 text-xs text-zinc-700 font-mono break-all">
+                    http://localhost:12346/v1/chat/completions
+                  </code>
+                  <button
+                    onClick={() => handleCopy('http://localhost:12346/v1/chat/completions')}
+                    className="p-1.5 hover:bg-zinc-200 rounded transition-colors flex-shrink-0"
+                    title="复制"
+                  >
+                    <Copy className="w-4 h-4 text-zinc-500" />
+                  </button>
+                </div>
               </div>
 
               {result.api_key && (
@@ -164,7 +183,7 @@ export function ApiVerifyModal({
                     </code>
                     <button
                       onClick={() => handleCopy(result.api_key!)}
-                      className="p-1.5 hover:bg-zinc-200 rounded transition-colors"
+                      className="p-1.5 hover:bg-zinc-200 rounded transition-colors flex-shrink-0"
                       title="复制"
                     >
                       <Copy className="w-4 h-4 text-zinc-500" />
@@ -173,22 +192,72 @@ export function ApiVerifyModal({
                 </div>
               )}
 
-              {result.docs_url && (
-                <div className="mb-3">
-                  <label className="block text-xs font-medium text-zinc-600 mb-1.5">
-                    API 文档
-                  </label>
+              {/* 可选模型 */}
+              <div className="mb-3">
+                <label className="block text-xs font-medium text-zinc-600 mb-1.5">
+                  可选模型
+                </label>
+                <div className="space-y-2">
+                  <div className="p-2.5 bg-zinc-50 rounded-lg border border-zinc-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <code className="text-xs text-zinc-700 font-mono">gemini-3.0-pro-image-portrait</code>
+                        <p className="text-xs text-zinc-500 mt-0.5">生成图片 (竖版)</p>
+                      </div>
+                      <button
+                        onClick={() => handleCopy('gemini-3.0-pro-image-portrait')}
+                        className="p-1.5 hover:bg-zinc-200 rounded transition-colors"
+                        title="复制"
+                      >
+                        <Copy className="w-3.5 h-3.5 text-zinc-400" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="p-2.5 bg-zinc-50 rounded-lg border border-zinc-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <code className="text-xs text-zinc-700 font-mono">veo_3_1_i2v_s_fast_fl_portrait</code>
+                        <p className="text-xs text-zinc-500 mt-0.5">生成视频 (竖版)</p>
+                      </div>
+                      <button
+                        onClick={() => handleCopy('veo_3_1_i2v_s_fast_fl_portrait')}
+                        className="p-1.5 hover:bg-zinc-200 rounded transition-colors"
+                        title="复制"
+                      >
+                        <Copy className="w-3.5 h-3.5 text-zinc-400" />
+                      </button>
+                    </div>
+                  </div>
+                  <p className="text-xs text-zinc-500 mt-1">更多模型请查看 API 文档</p>
+                </div>
+              </div>
+
+              {/* 文档链接 */}
+              <div className="mb-3 space-y-2">
+                <label className="block text-xs font-medium text-zinc-600 mb-1.5">
+                  文档与示例
+                </label>
+                {result.docs_url && (
                   <button
                     onClick={() => handleOpenDocs(result.docs_url!)}
                     className="w-full flex items-center justify-between p-2.5 bg-violet-50 hover:bg-violet-100 rounded-lg border border-violet-200 transition-colors group"
                   >
                     <span className="text-sm text-violet-700 font-medium">
-                      {result.docs_url}
+                      OpenAPI 文档
                     </span>
                     <ExternalLink className="w-4 h-4 text-violet-600 group-hover:translate-x-0.5 transition-transform" />
                   </button>
-                </div>
-              )}
+                )}
+                <button
+                  onClick={() => handleOpenDocs('http://localhost:12346/api-docs')}
+                  className="w-full flex items-center justify-between p-2.5 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 transition-colors group"
+                >
+                  <span className="text-sm text-blue-700 font-medium">
+                    调用示例与解析说明
+                  </span>
+                  <ExternalLink className="w-4 h-4 text-blue-600 group-hover:translate-x-0.5 transition-transform" />
+                </button>
+              </div>
             </div>
 
             <button

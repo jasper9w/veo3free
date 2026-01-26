@@ -310,6 +310,15 @@ def create_app(
     # 合并原来的 12343 WebSocket 服务（/ws）
     register_ws_routes(app, task_manager=task_manager, output_dir_base=output_dir_base)
 
+    @app.get("/api-info", include_in_schema=False)
+    async def api_info():
+        """返回 API 配置信息（供文档页面使用）"""
+        return {
+            "api_key": api_key,
+            "base_url": f"http://localhost:{API_SERVER_PORT}/v1",
+            "docs_url": f"http://localhost:{API_SERVER_PORT}/docs",
+        }
+
     @app.get("/health", response_model=HealthResponse, tags=["system"])
     async def health() -> HealthResponse:
         total, busy = task_manager.get_client_count()

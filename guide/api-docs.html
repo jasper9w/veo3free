@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API 调用示例 - Veo3Free</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #f5f5f5;
+            min-height: 100vh;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            font-size: 24px;
+            color: #1f2937;
+            margin-bottom: 8px;
+        }
+
+        .subtitle {
+            color: #6b7280;
+            font-size: 14px;
+            margin-bottom: 24px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .card h2 {
+            font-size: 18px;
+            color: #374151;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .card h3 {
+            font-size: 15px;
+            color: #4b5563;
+            margin: 16px 0 8px 0;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .badge-post {
+            background: #dbeafe;
+            color: #1d4ed8;
+        }
+
+        .badge-image {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .badge-video {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .endpoint {
+            background: #f3f4f6;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 14px;
+            color: #374151;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .endpoint .method {
+            background: #3b82f6;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        pre {
+            background: #1f2937;
+            color: #e5e7eb;
+            padding: 16px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 13px;
+            line-height: 1.5;
+            position: relative;
+        }
+
+        pre code {
+            font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+        }
+
+        .copy-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: #374151;
+            color: #9ca3af;
+            border: none;
+            padding: 6px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+
+        .copy-btn:hover {
+            background: #4b5563;
+            color: white;
+        }
+
+        .copy-btn.copied {
+            background: #059669;
+            color: white;
+        }
+
+        .model-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 12px;
+        }
+
+        .model-table th,
+        .model-table td {
+            padding: 10px 12px;
+            text-align: left;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .model-table th {
+            background: #f9fafb;
+            font-weight: 600;
+            font-size: 13px;
+            color: #4b5563;
+        }
+
+        .model-table td {
+            font-size: 13px;
+            color: #374151;
+        }
+
+        .model-table code {
+            background: #f3f4f6;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        .note {
+            background: #fef3c7;
+            border: 1px solid #fcd34d;
+            border-radius: 8px;
+            padding: 12px 16px;
+            font-size: 13px;
+            color: #92400e;
+            margin-top: 16px;
+        }
+
+        .note strong {
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        .info {
+            background: #dbeafe;
+            border: 1px solid #93c5fd;
+            border-radius: 8px;
+            padding: 12px 16px;
+            font-size: 13px;
+            color: #1e40af;
+            margin-top: 16px;
+        }
+
+        .string { color: #a5d6a7; }
+        .number { color: #ffcc80; }
+        .boolean { color: #90caf9; }
+        .null { color: #ce93d8; }
+        .key { color: #81d4fa; }
+        .comment { color: #78909c; }
+
+        .tabs {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 12px;
+            border-bottom: 1px solid #e5e7eb;
+            padding-bottom: 8px;
+        }
+
+        .tab {
+            padding: 8px 16px;
+            border: none;
+            background: transparent;
+            color: #6b7280;
+            font-size: 14px;
+            cursor: pointer;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+
+        .tab:hover {
+            background: #f3f4f6;
+        }
+
+        .tab.active {
+            background: #ede9fe;
+            color: #7c3aed;
+            font-weight: 500;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: #6b7280;
+            text-decoration: none;
+            font-size: 14px;
+            margin-bottom: 16px;
+        }
+
+        .back-link:hover {
+            color: #374151;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/guide" class="back-link">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M19 12H5M12 19l-7-7 7-7"/>
+            </svg>
+            返回引导页
+        </a>
+
+        <h1>API 调用示例</h1>
+        <p class="subtitle">本页面提供 OpenAI 兼容 API 的调用示例和响应解析说明</p>
+
+        <!-- 基本信息 -->
+        <div class="card">
+            <h2>基本信息</h2>
+            <div class="endpoint">
+                <span class="method">POST</span>
+                <span>http://localhost:12346/v1/chat/completions</span>
+            </div>
+            <p style="font-size: 14px; color: #6b7280;">
+                API 兼容 OpenAI Chat Completions 格式，支持生成图片和视频。请求时需要在 Header 中携带 API Token。
+            </p>
+            <div class="info">
+                <strong>认证方式</strong>
+                在请求头中添加 <code>Authorization: Bearer YOUR_API_TOKEN</code>
+            </div>
+        </div>
+
+        <!-- 可用模型 -->
+        <div class="card">
+            <h2>可用模型</h2>
+
+            <h3><span class="badge badge-image">图片生成</span></h3>
+            <table class="model-table">
+                <thead>
+                    <tr>
+                        <th>模型名称</th>
+                        <th>比例</th>
+                        <th>说明</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>gemini-2.5-flash-image-landscape</code></td>
+                        <td>16:9</td>
+                        <td>Gemini 2.5 Flash 横版图片</td>
+                    </tr>
+                    <tr>
+                        <td><code>gemini-2.5-flash-image-portrait</code></td>
+                        <td>9:16</td>
+                        <td>Gemini 2.5 Flash 竖版图片</td>
+                    </tr>
+                    <tr>
+                        <td><code>gemini-3.0-pro-image-landscape</code></td>
+                        <td>16:9</td>
+                        <td>Gemini 3.0 Pro 横版图片</td>
+                    </tr>
+                    <tr>
+                        <td><code>gemini-3.0-pro-image-portrait</code></td>
+                        <td>9:16</td>
+                        <td>Gemini 3.0 Pro 竖版图片</td>
+                    </tr>
+                    <tr>
+                        <td><code>imagen-4.0-generate-preview-landscape</code></td>
+                        <td>16:9</td>
+                        <td>Imagen 4.0 横版图片</td>
+                    </tr>
+                    <tr>
+                        <td><code>imagen-4.0-generate-preview-portrait</code></td>
+                        <td>9:16</td>
+                        <td>Imagen 4.0 竖版图片</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3><span class="badge badge-video">视频生成</span></h3>
+            <table class="model-table">
+                <thead>
+                    <tr>
+                        <th>模型名称</th>
+                        <th>比例</th>
+                        <th>说明</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>veo_3_generate_landscape</code></td>
+                        <td>16:9</td>
+                        <td>Veo 3 文生视频 横版</td>
+                    </tr>
+                    <tr>
+                        <td><code>veo_3_generate_portrait</code></td>
+                        <td>9:16</td>
+                        <td>Veo 3 文生视频 竖版</td>
+                    </tr>
+                    <tr>
+                        <td><code>veo_3_1_i2v_s_fast_fl_landscape</code></td>
+                        <td>16:9</td>
+                        <td>Veo 3.1 图生视频 横版 (快速)</td>
+                    </tr>
+                    <tr>
+                        <td><code>veo_3_1_i2v_s_fast_fl_portrait</code></td>
+                        <td>9:16</td>
+                        <td>Veo 3.1 图生视频 竖版 (快速)</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="note">
+                <strong>提示</strong>
+                更多模型请访问 <a href="/docs" target="_blank">/docs</a> 查看完整的 OpenAPI 文档
+            </div>
+        </div>
+
+        <!-- 调用示例 -->
+        <div class="card">
+            <h2>调用示例</h2>
+
+            <div class="tabs">
+                <button class="tab active" data-tab="curl">cURL</button>
+                <button class="tab" data-tab="python">Python</button>
+                <button class="tab" data-tab="javascript">JavaScript</button>
+            </div>
+
+            <!-- cURL -->
+            <div class="tab-content active" id="tab-curl">
+                <h3>生成图片</h3>
+                <pre><code id="code-curl-image"><span class="comment"># 生成图片示例</span>
+curl -X POST http://localhost:12346/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_TOKEN" \
+  -d '{
+    "model": "gemini-3.0-pro-image-portrait",
+    "messages": [
+      {
+        "role": "user",
+        "content": "一只可爱的橘猫在阳光下打盹"
+      }
+    ]
+  }'</code><button class="copy-btn" onclick="copyCode('code-curl-image')">复制</button></pre>
+
+                <h3>生成视频 (图生视频)</h3>
+                <pre><code id="code-curl-video"><span class="comment"># 图生视频示例 (需要提供图片 URL)</span>
+curl -X POST http://localhost:12346/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_TOKEN" \
+  -d '{
+    "model": "veo_3_1_i2v_s_fast_fl_portrait",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "https://example.com/your-image.jpg"
+            }
+          },
+          {
+            "type": "text",
+            "text": "让画面中的猫咪慢慢睁开眼睛，伸个懒腰"
+          }
+        ]
+      }
+    ]
+  }'</code><button class="copy-btn" onclick="copyCode('code-curl-video')">复制</button></pre>
+            </div>
+
+            <!-- Python -->
+            <div class="tab-content" id="tab-python">
+                <h3>使用 OpenAI SDK</h3>
+                <pre><code id="code-python-openai"><span class="comment"># pip install openai</span>
+<span class="key">from</span> openai <span class="key">import</span> OpenAI
+
+client = OpenAI(
+    base_url=<span class="string">"http://localhost:12346/v1"</span>,
+    api_key=<span class="string">"YOUR_API_TOKEN"</span>
+)
+
+<span class="comment"># 生成图片</span>
+response = client.chat.completions.create(
+    model=<span class="string">"gemini-3.0-pro-image-portrait"</span>,
+    messages=[
+        {<span class="string">"role"</span>: <span class="string">"user"</span>, <span class="string">"content"</span>: <span class="string">"一只可爱的橘猫在阳光下打盹"</span>}
+    ]
+)
+
+<span class="comment"># 解析结果</span>
+result = response.choices[<span class="number">0</span>].message.content
+print(result)  <span class="comment"># 包含图片 URL</span></code><button class="copy-btn" onclick="copyCode('code-python-openai')">复制</button></pre>
+
+                <h3>使用 requests</h3>
+                <pre><code id="code-python-requests"><span class="key">import</span> requests
+
+response = requests.post(
+    <span class="string">"http://localhost:12346/v1/chat/completions"</span>,
+    headers={
+        <span class="string">"Content-Type"</span>: <span class="string">"application/json"</span>,
+        <span class="string">"Authorization"</span>: <span class="string">"Bearer YOUR_API_TOKEN"</span>
+    },
+    json={
+        <span class="string">"model"</span>: <span class="string">"gemini-3.0-pro-image-portrait"</span>,
+        <span class="string">"messages"</span>: [
+            {<span class="string">"role"</span>: <span class="string">"user"</span>, <span class="string">"content"</span>: <span class="string">"一只可爱的橘猫在阳光下打盹"</span>}
+        ]
+    }
+)
+
+data = response.json()
+print(data[<span class="string">"choices"</span>][<span class="number">0</span>][<span class="string">"message"</span>][<span class="string">"content"</span>])</code><button class="copy-btn" onclick="copyCode('code-python-requests')">复制</button></pre>
+            </div>
+
+            <!-- JavaScript -->
+            <div class="tab-content" id="tab-javascript">
+                <h3>使用 fetch</h3>
+                <pre><code id="code-js-fetch"><span class="key">const</span> response = <span class="key">await</span> fetch(<span class="string">'http://localhost:12346/v1/chat/completions'</span>, {
+  method: <span class="string">'POST'</span>,
+  headers: {
+    <span class="string">'Content-Type'</span>: <span class="string">'application/json'</span>,
+    <span class="string">'Authorization'</span>: <span class="string">'Bearer YOUR_API_TOKEN'</span>
+  },
+  body: JSON.stringify({
+    model: <span class="string">'gemini-3.0-pro-image-portrait'</span>,
+    messages: [
+      { role: <span class="string">'user'</span>, content: <span class="string">'一只可爱的橘猫在阳光下打盹'</span> }
+    ]
+  })
+});
+
+<span class="key">const</span> data = <span class="key">await</span> response.json();
+console.log(data.choices[<span class="number">0</span>].message.content);</code><button class="copy-btn" onclick="copyCode('code-js-fetch')">复制</button></pre>
+
+                <h3>使用 OpenAI SDK</h3>
+                <pre><code id="code-js-openai"><span class="comment">// npm install openai</span>
+<span class="key">import</span> OpenAI <span class="key">from</span> <span class="string">'openai'</span>;
+
+<span class="key">const</span> client = <span class="key">new</span> OpenAI({
+  baseURL: <span class="string">'http://localhost:12346/v1'</span>,
+  apiKey: <span class="string">'YOUR_API_TOKEN'</span>
+});
+
+<span class="key">const</span> response = <span class="key">await</span> client.chat.completions.create({
+  model: <span class="string">'gemini-3.0-pro-image-portrait'</span>,
+  messages: [
+    { role: <span class="string">'user'</span>, content: <span class="string">'一只可爱的橘猫在阳光下打盹'</span> }
+  ]
+});
+
+console.log(response.choices[<span class="number">0</span>].message.content);</code><button class="copy-btn" onclick="copyCode('code-js-openai')">复制</button></pre>
+            </div>
+        </div>
+
+        <!-- 响应格式 -->
+        <div class="card">
+            <h2>响应格式</h2>
+            <p style="font-size: 14px; color: #6b7280; margin-bottom: 16px;">
+                响应遵循 OpenAI Chat Completions 格式，生成的文件 URL 包含在 <code>content</code> 字段中。
+            </p>
+
+            <h3>成功响应示例</h3>
+            <pre><code id="code-response">{
+  <span class="key">"id"</span>: <span class="string">"chatcmpl-abc123"</span>,
+  <span class="key">"object"</span>: <span class="string">"chat.completion"</span>,
+  <span class="key">"created"</span>: <span class="number">1706000000</span>,
+  <span class="key">"model"</span>: <span class="string">"gemini-3.0-pro-image-portrait"</span>,
+  <span class="key">"choices"</span>: [
+    {
+      <span class="key">"index"</span>: <span class="number">0</span>,
+      <span class="key">"message"</span>: {
+        <span class="key">"role"</span>: <span class="string">"assistant"</span>,
+        <span class="key">"content"</span>: <span class="string">"http://localhost:12346/files/task_xxx/image_001.png"</span>
+      },
+      <span class="key">"finish_reason"</span>: <span class="string">"stop"</span>
+    }
+  ],
+  <span class="key">"usage"</span>: {
+    <span class="key">"prompt_tokens"</span>: <span class="number">10</span>,
+    <span class="key">"completion_tokens"</span>: <span class="number">20</span>,
+    <span class="key">"total_tokens"</span>: <span class="number">30</span>
+  }
+}</code><button class="copy-btn" onclick="copyCode('code-response')">复制</button></pre>
+
+            <h3>错误响应示例</h3>
+            <pre><code id="code-error">{
+  <span class="key">"error"</span>: {
+    <span class="key">"message"</span>: <span class="string">"Invalid API key"</span>,
+    <span class="key">"type"</span>: <span class="string">"invalid_request_error"</span>,
+    <span class="key">"code"</span>: <span class="string">"invalid_api_key"</span>
+  }
+}</code><button class="copy-btn" onclick="copyCode('code-error')">复制</button></pre>
+
+            <div class="note">
+                <strong>注意事项</strong>
+                <ul style="margin-top: 8px; padding-left: 20px;">
+                    <li>生成的文件 URL 仅在本地可访问</li>
+                    <li>图片/视频生成可能需要较长时间，请设置合适的超时时间</li>
+                    <li>确保 Veo3Free 应用正在运行且已连接到 Flow</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 获取真实 API Token 并替换示例代码
+        async function loadApiInfo() {
+            try {
+                const response = await fetch('/api-info');
+                const data = await response.json();
+                if (data.api_key) {
+                    // 替换所有代码块中的占位符
+                    document.querySelectorAll('pre code').forEach(codeBlock => {
+                        codeBlock.innerHTML = codeBlock.innerHTML.replace(/YOUR_API_TOKEN/g, data.api_key);
+                    });
+                }
+            } catch (e) {
+                console.warn('Failed to load API info:', e);
+            }
+        }
+
+        // 页面加载时获取 API 信息
+        document.addEventListener('DOMContentLoaded', loadApiInfo);
+
+        // Tab 切换
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                const tabId = tab.dataset.tab;
+
+                // 更新 tab 状态
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+
+                // 更新内容
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                document.getElementById('tab-' + tabId).classList.add('active');
+            });
+        });
+
+        // 复制代码
+        function copyCode(elementId) {
+            const codeElement = document.getElementById(elementId);
+            const text = codeElement.textContent;
+
+            navigator.clipboard.writeText(text).then(() => {
+                const btn = codeElement.parentElement.querySelector('.copy-btn');
+                btn.textContent = '已复制';
+                btn.classList.add('copied');
+
+                setTimeout(() => {
+                    btn.textContent = '复制';
+                    btn.classList.remove('copied');
+                }, 2000);
+            });
+        }
+    </script>
+</body>
+</html>
