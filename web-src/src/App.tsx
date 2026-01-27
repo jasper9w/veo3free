@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Play, Square, FolderOpen, FileSpreadsheet, X, Image, Film, Sparkles, Check, Loader2, Clock, AlertCircle, Plus, ChevronDown, RotateCw } from 'lucide-react';
+import { Play, Square, FolderOpen, FileSpreadsheet, X, Image, Film, Sparkles, Check, Loader2, Clock, AlertCircle, Plus, ChevronDown, RotateCw, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { UpdateModal } from './components/UpdateModal';
 import { UpdateStatusBar } from './components/UpdateStatusBar';
@@ -56,11 +56,13 @@ interface TaskCardProps {
   task: Task;
   index: number;
   onRetry?: (index: number) => void;
+  onRun?: (index: number) => void;
 }
 
-function TaskCard({ task, index, onRetry }: TaskCardProps) {
+function TaskCard({ task, index, onRetry, onRun }: TaskCardProps) {
   const [, setTick] = useState(0);
   const [retrying, setRetrying] = useState(false);
+  const [running, setRunning] = useState(false);
   const statusConfig: Record<string, { icon: React.ComponentType<{ className?: string }>; color: string; bg: string; text: string; label: string; animate?: boolean }> = {
     '已完成': { icon: Check, color: 'emerald', bg: 'bg-emerald-50', text: 'text-emerald-600', label: '已完成' },
     '处理中': { icon: Loader2, color: 'blue', bg: 'bg-blue-50', text: 'text-blue-600', label: task.status_detail || '处理中', animate: true },
@@ -86,6 +88,7 @@ function TaskCard({ task, index, onRetry }: TaskCardProps) {
   const isVideo = task.file_ext === '.mp4';
   const hasPreview = task.status === '已完成' && task.saved_path;
   const canRetry = ['失败', '超时', '下载失败'].includes(task.status);
+  const canRun = task.status === '等待中';
 
   // 点击打开文件
   const handleClick = async () => {
@@ -103,6 +106,18 @@ function TaskCard({ task, index, onRetry }: TaskCardProps) {
       await onRetry(index);
     } finally {
       setRetrying(false);
+    }
+  };
+
+  // 立即执行任务
+  const handleRun = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (running || !onRun) return;
+    setRunning(true);
+    try {
+      await onRun(index);
+    } finally {
+      setRunning(false);
     }
   };
 
@@ -147,6 +162,18 @@ function TaskCard({ task, index, onRetry }: TaskCardProps) {
             </p>
           )}
         </div>
+
+        {/* Run Button for pending tasks */}
+        {canRun && onRun && (
+          <button
+            onClick={handleRun}
+            disabled={running}
+            className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 bg-emerald-50 hover:bg-emerald-100 transition-colors disabled:opacity-50"
+            title="立即生成"
+          >
+            <Play className={`w-5 h-5 text-emerald-600 ${running ? 'animate-pulse' : ''}`} />
+          </button>
+        )}
 
         {/* Retry Button for failed tasks */}
         {canRetry && onRetry && (
@@ -235,6 +262,27 @@ function App() {
       await api.retry_all_failed();
     } catch (e) {
       console.error('重试所有失败任务失败:', e);
+    }
+  };
+
+  // 清除所有任务
+  const handleClearTasks = async () => {
+    if (!api) return;
+    if (!confirm('确定要清除所有任务吗？')) return;
+    try {
+      await (api as any).clear_tasks();
+    } catch (e) {
+      console.error('清除任务失败:', e);
+    }
+  };
+
+  // 立即执行单个任务
+  const handleRunSingleTask = async (index: number) => {
+    if (!api) return;
+    try {
+      await (api as any).run_single_task(index);
+    } catch (e) {
+      console.error('执行任务失败:', e);
     }
   };
 
@@ -731,6 +779,15 @@ function App() {
                 >
                   <FolderOpen className="w-5 h-5 text-zinc-500" />
                 </button>
+                {status.tasks.length > 0 && !status.is_running && (
+                  <button
+                    onClick={handleClearTasks}
+                    className="p-2.5 hover:bg-red-50 rounded-xl transition-colors border border-zinc-200"
+                    title="清除所有任务"
+                  >
+                    <Trash2 className="w-5 h-5 text-zinc-500 hover:text-red-500" />
+                  </button>
+                )}
               </div>
             </div>
 
@@ -785,6 +842,7 @@ function App() {
                       task={task}
                       index={index}
                       onRetry={handleRetryTask}
+                      onRun={handleRunSingleTask}
                     />
                   ))
                 )}

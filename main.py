@@ -268,10 +268,17 @@ class TaskManager:
                     timeout_tasks.append(task)
         return timeout_tasks
 
+    def clear_tasks(self):
+        """清除所有任务"""
+        self.tasks.clear()
+        self.current_index = 0
+        self.is_running = False
+        logger.info("已清除所有任务")
+
 
 class ImageProcessor:
     @staticmethod
-    def compress_image_to_base64(image_path, max_size_bytes=128 * 1024):
+    def compress_image_to_base64(image_path, max_size_bytes=768 * 1024):
         try:
             img = Image.open(image_path)
             if img.mode in ('RGBA', 'LA', 'P'):
@@ -443,6 +450,39 @@ class Api:
             self.start_execution()
         
         return {'success': True, 'count': len(failed_indices)}
+
+    def clear_tasks(self) -> dict:
+        """清除所有任务"""
+        self.task_manager.clear_tasks()
+        return {'success': True}
+
+    def run_single_task(self, task_index: int) -> dict:
+        """立即执行单个任务"""
+        if task_index < 0 or task_index >= len(self.task_manager.tasks):
+            return {'success': False, 'error': '任务索引无效'}
+        
+        task = self.task_manager.tasks[task_index]
+        if task['status'] != '等待中':
+            return {'success': False, 'error': '只能执行等待中的任务'}
+        
+        total, _ = self.task_manager.get_client_count()
+        if total == 0:
+            return {'success': False, 'error': '没有连接的客户端'}
+        
+        # 将任务移动到当前执行位置
+        if task_index != self.task_manager.current_index:
+            # 从原位置移除
+            self.task_manager.tasks.pop(task_index)
+            # 插入到当前执行位置
+            self.task_manager.tasks.insert(self.task_manager.current_index, task)
+        
+        logger.info(f"立即执行任务: {task['id']}")
+        
+        # 启动执行
+        if not self.task_manager.is_running:
+            self.start_execution()
+        
+        return {'success': True}
 
     def get_status(self):
         total, busy = self.task_manager.get_client_count()
