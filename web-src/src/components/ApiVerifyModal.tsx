@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Key, CheckCircle, AlertCircle, ExternalLink, Copy, Loader2, Info } from 'lucide-react';
+import { X, Key, CheckCircle, AlertCircle, ExternalLink, Copy, Loader2, Info, Check } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 interface ApiVerifyModalProps {
@@ -19,6 +19,7 @@ export function ApiVerifyModal({
   const [verifying, setVerifying] = useState(false);
   const [showInput, setShowInput] = useState(false);
   const [result, setResult] = useState<{ success: boolean; error?: string; token?: string; api_key?: string; docs_url?: string } | null>(null);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   // 当 initialStatus 变化或弹窗打开时，更新 result
   useEffect(() => {
@@ -43,8 +44,25 @@ export function ApiVerifyModal({
     }
   };
 
-  const handleCopy = (text: string) => {
-    navigator.clipboard.writeText(text);
+  const handleCopy = (text: string, key: string) => {
+    // 使用传统方法复制，避免触发 pywebview Qt 后端的权限请求导致 crash
+    try {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.left = '-9999px';
+      textarea.style.top = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      
+      // 显示复制成功状态
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey(null), 1500);
+    } catch (err) {
+      console.error('Copy failed:', err);
+    }
   };
 
   const handleOpenDocs = (url: string) => {
@@ -163,11 +181,15 @@ export function ApiVerifyModal({
                     http://localhost:12346/v1/chat/completions
                   </code>
                   <button
-                    onClick={() => handleCopy('http://localhost:12346/v1/chat/completions')}
+                    onClick={() => handleCopy('http://localhost:12346/v1/chat/completions', 'url')}
                     className="p-1.5 hover:bg-zinc-200 rounded transition-colors flex-shrink-0"
                     title="复制"
                   >
-                    <Copy className="w-4 h-4 text-zinc-500" />
+                    {copiedKey === 'url' ? (
+                      <Check className="w-4 h-4 text-emerald-500" />
+                    ) : (
+                      <Copy className="w-4 h-4 text-zinc-500" />
+                    )}
                   </button>
                 </div>
               </div>
@@ -182,11 +204,15 @@ export function ApiVerifyModal({
                       {result.api_key}
                     </code>
                     <button
-                      onClick={() => handleCopy(result.api_key!)}
+                      onClick={() => handleCopy(result.api_key!, 'token')}
                       className="p-1.5 hover:bg-zinc-200 rounded transition-colors flex-shrink-0"
                       title="复制"
                     >
-                      <Copy className="w-4 h-4 text-zinc-500" />
+                      {copiedKey === 'token' ? (
+                        <Check className="w-4 h-4 text-emerald-500" />
+                      ) : (
+                        <Copy className="w-4 h-4 text-zinc-500" />
+                      )}
                     </button>
                   </div>
                 </div>
@@ -205,11 +231,15 @@ export function ApiVerifyModal({
                         <p className="text-xs text-zinc-500 mt-0.5">生成图片 (竖版)</p>
                       </div>
                       <button
-                        onClick={() => handleCopy('gemini-3.0-pro-image-portrait')}
+                        onClick={() => handleCopy('gemini-3.0-pro-image-portrait', 'model1')}
                         className="p-1.5 hover:bg-zinc-200 rounded transition-colors"
                         title="复制"
                       >
-                        <Copy className="w-3.5 h-3.5 text-zinc-400" />
+                        {copiedKey === 'model1' ? (
+                          <Check className="w-3.5 h-3.5 text-emerald-500" />
+                        ) : (
+                          <Copy className="w-3.5 h-3.5 text-zinc-400" />
+                        )}
                       </button>
                     </div>
                   </div>
@@ -220,11 +250,15 @@ export function ApiVerifyModal({
                         <p className="text-xs text-zinc-500 mt-0.5">生成视频 (竖版)</p>
                       </div>
                       <button
-                        onClick={() => handleCopy('veo_3_1_i2v_s_fast_fl_portrait')}
+                        onClick={() => handleCopy('veo_3_1_i2v_s_fast_fl_portrait', 'model2')}
                         className="p-1.5 hover:bg-zinc-200 rounded transition-colors"
                         title="复制"
                       >
-                        <Copy className="w-3.5 h-3.5 text-zinc-400" />
+                        {copiedKey === 'model2' ? (
+                          <Check className="w-3.5 h-3.5 text-emerald-500" />
+                        ) : (
+                          <Copy className="w-3.5 h-3.5 text-zinc-400" />
+                        )}
                       </button>
                     </div>
                   </div>
