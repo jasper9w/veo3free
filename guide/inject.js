@@ -464,7 +464,19 @@
             $x(`//div[@role="option"]//*[contains(text(), '${taskType}')]`)[0]?.click();
             await sleep(300);
 
-            // 上传图片
+            // 先设置参数（比例/方向）
+            sendStatus('设置参数...');
+            $x1('//textarea[@id="PINHOLE_TEXT_AREA_ELEMENT_ID"]/..//button[contains(., "Settings")]')?.click();
+            await sleep(300);
+            $x1('//button[contains(., "Aspect Ratio")]')?.click();
+            await sleep(300);
+            $x1(`//div[@role="option"]//span[contains(text(), "${aspectRatio}")]`)?.click();
+            await sleep(300);
+            $x1('//button[contains(., "Outputs per prompt")]')?.click();
+            await sleep(300);
+            $x1('//div[@role="option" and normalize-space()="1"]')?.click();
+
+            // 再上传图片
             if (taskType === 'Frames to Video') {
                 sendStatus('上传首尾帧...');
                 await uploadFrameImages(referenceImages);
@@ -476,18 +488,6 @@
                     await sleep(500);
                 }
             }
-
-            // 设置参数
-            sendStatus('设置参数...');
-            $x1('//textarea[@id="PINHOLE_TEXT_AREA_ELEMENT_ID"]/..//button[contains(., "Settings")]')?.click();
-            await sleep(300);
-            $x1('//button[contains(., "Aspect Ratio")]')?.click();
-            await sleep(300);
-            $x1(`//div[@role="option"]//span[contains(text(), "${aspectRatio}")]`)?.click();
-            await sleep(300);
-            $x1('//button[contains(., "Outputs per prompt")]')?.click();
-            await sleep(300);
-            $x1('//div[@role="option" and normalize-space()="1"]')?.click();
 
             // 输入prompt
             sendStatus('开始: ' + prompt.substring(0, 30));
