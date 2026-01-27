@@ -51,6 +51,18 @@ export function BatchTemplateModal({ isOpen, onClose }: BatchTemplateModalProps)
     }
   }, [isOpen]);
 
+  // ESC 键关闭
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   // 当任务类型变化时，更新分辨率
   useEffect(() => {
     const availableResolutions = RESOLUTIONS[taskType] || ['720p', '1080p'];
