@@ -427,9 +427,9 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-zinc-50 via-white to-zinc-100">
+    <div className="h-screen overflow-hidden flex flex-col bg-gradient-to-br from-zinc-50 via-white to-zinc-100">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-zinc-200/50">
+      <header className="flex-shrink-0 z-50 bg-white/80 backdrop-blur-xl border-b border-zinc-200/50">
         <div className="max-w-6xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -474,10 +474,10 @@ function App() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-6 py-8 pb-12">
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+      <main className="flex-1 min-h-0 overflow-hidden max-w-6xl w-full mx-auto px-6 py-8">
+        <div className="h-full grid grid-cols-1 lg:grid-cols-5 gap-8">
           {/* Left: Create Panel */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="lg:col-span-2 space-y-6 overflow-y-auto">
             {/* Tab Switcher */}
             <div className="flex bg-zinc-100 p-1 rounded-2xl">
               <button
@@ -688,7 +688,7 @@ function App() {
           </div>
 
           {/* Right: Task Queue */}
-          <div className="lg:col-span-3 space-y-4">
+          <div className="lg:col-span-3 flex flex-col min-h-0 space-y-4">
             {/* Queue Header */}
             <div className="flex items-center justify-between flex-wrap gap-3">
               <div className="flex items-center gap-3">
@@ -765,7 +765,7 @@ function App() {
             )}
 
             {/* Task List */}
-            <div className="space-y-3 max-h-96 lg:max-h-screen overflow-y-auto pr-1">
+            <div className="flex-1 min-h-0 space-y-3 overflow-y-auto pr-1">
               <AnimatePresence>
                 {status.tasks.length === 0 ? (
                   <motion.div
