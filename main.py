@@ -1132,7 +1132,7 @@ class Api:
             return {'success': False, 'folder_path': '', 'images': [], 'error': str(e)}
 
     def create_custom_template(self, images: list, task_type: str, aspect_ratio: str,
-                                resolution: str, output_dir: str, default_prompt: str = "") -> dict:
+                                resolution: str, output_dir: str, default_prompt: str) -> dict:
         """根据图片列表和参数创建预填充的 Excel 模板"""
         if Workbook is None:
             return {'success': False, 'error': '请安装 openpyxl'}
