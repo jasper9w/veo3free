@@ -201,10 +201,9 @@ function App() {
 
   const api = typeof window !== 'undefined' ? window.pywebview?.api : null;
 
-  // 视频类任务竖屏时只支持720p
   const resolutions = taskType === 'Create Image'
     ? ['1K', '2K', '4K']
-    : (aspectRatio === '9:16' ? ['720p'] : ['720p', '1080p']);
+    : ['720p', '1080p'];
 
   // 缓存任务统计，避免每次都重新计算
   const { completed, processing, failed, progress } = useMemo(() => {
@@ -309,7 +308,7 @@ function App() {
   useEffect(() => {
     const currentResolutions = taskType === 'Create Image'
       ? ['1K', '2K', '4K']
-      : (aspectRatio === '9:16' ? ['720p'] : ['720p', '1080p']);
+      : ['720p', '1080p'];
 
     if (!currentResolutions.includes(resolution)) {
       setResolution(currentResolutions[currentResolutions.length - 1]);
