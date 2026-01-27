@@ -38,7 +38,7 @@ if [ ! -d "web-src/node_modules" ]; then
 fi
 
 # 启动前端开发服务器
-echo -e "${GREEN}启动前端开发服务器 (http://localhost:5173)${NC}"
+echo -e "${GREEN}启动前端开发服务器 (http://localhost:9173)${NC}"
 cd web-src && npm run dev &
 FRONTEND_PID=$!
 

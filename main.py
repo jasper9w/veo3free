@@ -1113,8 +1113,8 @@ def main():
         web_dir = Path(__file__).parent / 'web'
         # 检查是否使用开发服务器
         if os.environ.get('DEV') == '1' or not web_dir.exists():
-            url = 'http://localhost:5173'
-            logger.info("使用开发服务器: http://localhost:5173")
+            url = 'http://localhost:9173'
+            logger.info("使用开发服务器: http://localhost:9173")
         else:
             url = str(web_dir / 'index.html')
             logger.info(f"使用本地文件: {url}")
