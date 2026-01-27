@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { UpdateModal } from './components/UpdateModal';
 import { UpdateStatusBar } from './components/UpdateStatusBar';
 import { ApiVerifyModal } from './components/ApiVerifyModal';
+import { BatchTemplateModal } from './components/BatchTemplateModal';
 import type { SystemInfo, UpdateInfo } from './types';
 
 interface Task {
@@ -225,6 +226,7 @@ function App() {
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [showApiVerifyModal, setShowApiVerifyModal] = useState(false);
   const [apiVerifyStatus, setApiVerifyStatus] = useState<{ verified: boolean; api_key?: string; docs_url?: string } | null>(null);
+  const [showBatchTemplateModal, setShowBatchTemplateModal] = useState(false);
 
   const api = typeof window !== 'undefined' ? window.pywebview?.api : null;
 
@@ -723,12 +725,38 @@ function App() {
                     <p className="text-sm font-medium text-zinc-700 mb-1">点击选择 Excel 文件</p>
                     <p className="text-xs text-zinc-400">支持 .xlsx 格式</p>
                   </div>
-                  <button
-                    onClick={handleExportTemplate}
-                    className="w-full py-3 bg-zinc-100 text-zinc-600 rounded-xl text-sm font-medium hover:bg-zinc-200 transition-colors"
-                  >
-                    下载模板文件
-                  </button>
+
+                  {/* 模板下载区域 */}
+                  <div className="bg-zinc-50 rounded-2xl p-4 space-y-3">
+                    <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide">下载模板</p>
+                    
+                    {/* 简单模板 */}
+                    <div className="bg-white rounded-xl p-4 border border-violet-200">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-violet-700">简单模板</p>
+                        <span className="px-1.5 py-0.5 bg-violet-100 text-violet-600 rounded text-[10px] font-medium">新手推荐</span>
+                      </div>
+                      <p className="text-xs text-zinc-400 mt-1 mb-3">选择图片文件夹自动生成，只需填写提示词</p>
+                      <button
+                        onClick={() => setShowBatchTemplateModal(true)}
+                        className="w-full py-2.5 bg-violet-100 text-violet-700 rounded-xl text-sm font-medium hover:bg-violet-200 transition-colors"
+                      >
+                        创建简单模板
+                      </button>
+                    </div>
+
+                    {/* 高级模板 */}
+                    <div className="bg-white rounded-xl p-4 border border-zinc-200">
+                      <p className="text-sm font-medium text-zinc-700">高级模板</p>
+                      <p className="text-xs text-zinc-400 mt-1 mb-3">手动填写提示词和图片路径，适合自定义任务</p>
+                      <button
+                        onClick={handleExportTemplate}
+                        className="w-full py-2.5 bg-zinc-100 text-zinc-700 rounded-xl text-sm font-medium hover:bg-zinc-200 transition-colors"
+                      >
+                        下载高级模板
+                      </button>
+                    </div>
+                  </div>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -894,6 +922,12 @@ function App() {
             return { success: false, error: error instanceof Error ? error.message : '验证失败' };
           }
         }}
+      />
+
+      {/* Batch Template Modal */}
+      <BatchTemplateModal
+        isOpen={showBatchTemplateModal}
+        onClose={() => setShowBatchTemplateModal(false)}
       />
     </div>
   );

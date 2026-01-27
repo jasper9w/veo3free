@@ -691,10 +691,6 @@ class Api:
 
             allowed = valid_resolutions[task_type]
 
-            # 视频类任务竖屏时不支持1080p
-            if "Video" in task_type and aspect_ratio == "9:16" and resolution == "1080p":
-                return False, f"{task_type} 竖屏模式不支持 1080p，请使用 720p"
-
             if resolution not in allowed:
                 return False, f"{task_type} 不支持分辨率 {resolution}，请使用: {', '.join(allowed)}"
             return True, ""
@@ -830,7 +826,7 @@ class Api:
         result = webview.windows[0].create_file_dialog(
             webview.SAVE_DIALOG,
             file_types=file_types,
-            save_filename='任务模板.xlsx'
+            save_filename='高级模板.xlsx'
         )
         if not result:
             return
@@ -865,7 +861,7 @@ class Api:
                     ws.cell(row=row_idx, column=col_idx, value=value)
 
             wb.save(filepath)
-            logger.info(f"已导出模板: {filepath}")
+            logger.info(f"已导出高级模板: {filepath}")
 
         except Exception as e:
             log_error_to_file("导出模板失败", e)
@@ -1099,6 +1095,114 @@ class Api:
                 'success': False,
                 'error': f'验证异常: {str(e)}'
             }
+
+    def select_image_folder(self) -> dict:
+        """选择文件夹并扫描图片，返回图片路径列表"""
+        try:
+            # 从用户主目录开始选择
+            start_dir = str(Path.home())
+            result = webview.windows[0].create_file_dialog(
+                webview.FOLDER_DIALOG,
+                directory=start_dir
+            )
+            if not result:
+                return {'success': False, 'folder_path': '', 'images': []}
+
+            folder_path = result[0] if isinstance(result, (list, tuple)) else result
+            folder = Path(folder_path)
+
+            if not folder.exists() or not folder.is_dir():
+                return {'success': False, 'folder_path': '', 'images': [], 'error': '选择的路径不是有效文件夹'}
+
+            # 扫描图片文件
+            image_extensions = {'.jpg', '.jpeg', '.png', '.webp'}
+            images = []
+            for file in sorted(folder.iterdir()):
+                if file.is_file() and file.suffix.lower() in image_extensions:
+                    images.append(str(file.absolute()))
+
+            logger.info(f"扫描文件夹: {folder_path}, 找到 {len(images)} 张图片")
+            return {
+                'success': True,
+                'folder_path': str(folder_path),
+                'images': images
+            }
+        except Exception as e:
+            log_error_to_file("选择图片文件夹失败", e)
+            return {'success': False, 'folder_path': '', 'images': [], 'error': str(e)}
+
+    def create_custom_template(self, images: list, task_type: str, aspect_ratio: str,
+                                resolution: str, output_dir: str, default_prompt: str = "") -> dict:
+        """根据图片列表和参数创建预填充的 Excel 模板"""
+        if Workbook is None:
+            return {'success': False, 'error': '请安装 openpyxl'}
+
+        if not images:
+            return {'success': False, 'error': '没有图片可导出'}
+
+        # 任务类型映射（英文 -> 中文）
+        task_type_map = {
+            "Create Image": "文生图片",
+            "Frames to Video": "首尾帧视频",
+            "Ingredients to Video": "图生视频",
+        }
+
+        # 屏幕方向映射
+        orientation_map = {
+            "16:9": "横屏",
+            "9:16": "竖屏"
+        }
+
+        task_type_cn = task_type_map.get(task_type, task_type)
+        orientation_cn = orientation_map.get(aspect_ratio, aspect_ratio)
+
+        file_types = ('Excel文件 (*.xlsx)',)
+        # 从用户文档目录开始保存
+        start_dir = str(Path.home() / "Documents")
+        result = webview.windows[0].create_file_dialog(
+            webview.SAVE_DIALOG,
+            directory=start_dir,
+            file_types=file_types,
+            save_filename='简单模板.xlsx'
+        )
+        if not result:
+            return {'success': False, 'error': '取消保存'}
+
+        filepath = result if isinstance(result, str) else result[0]
+
+        # 确保有 .xlsx 扩展名
+        if not filepath.lower().endswith('.xlsx'):
+            filepath += '.xlsx'
+
+        try:
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "任务列表"
+
+            # 表头
+            headers = ["编号", "提示词", "任务类型", "屏幕方向", "分辨率", "输出文件夹",
+                       "图1", "图2", "图3", "图4", "图5", "图6", "图7", "图8"]
+            for col, header in enumerate(headers, start=1):
+                ws.cell(row=1, column=col, value=header)
+
+            # 为每张图片生成一行
+            for idx, img_path in enumerate(images, start=1):
+                row_idx = idx + 1  # 第2行开始
+                ws.cell(row=row_idx, column=1, value=idx)  # 编号
+                ws.cell(row=row_idx, column=2, value=default_prompt or "")  # 默认提示词
+                ws.cell(row=row_idx, column=3, value=task_type_cn)  # 任务类型
+                ws.cell(row=row_idx, column=4, value=orientation_cn)  # 屏幕方向
+                ws.cell(row=row_idx, column=5, value=resolution)  # 分辨率
+                ws.cell(row=row_idx, column=6, value=output_dir or "")  # 输出文件夹
+                ws.cell(row=row_idx, column=7, value=img_path)  # 图1
+
+            wb.save(filepath)
+            logger.info(f"已创建简单模板: {filepath}, 包含 {len(images)} 行")
+            return {'success': True, 'filepath': filepath, 'count': len(images)}
+
+        except Exception as e:
+            log_error_to_file("创建专用模板失败", e)
+            return {'success': False, 'error': str(e)}
 def main():
     # 启动日志
     logger.info("=" * 50)

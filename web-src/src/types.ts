@@ -32,6 +32,20 @@ export interface UpdateInfo {
   release_url: string;
 }
 
+export interface SelectImageFolderResult {
+  success: boolean;
+  folder_path: string;
+  images: string[];
+  error?: string;
+}
+
+export interface CreateCustomTemplateResult {
+  success: boolean;
+  filepath?: string;
+  count?: number;
+  error?: string;
+}
+
 export interface PyWebViewApi {
   add_task: (
     prompt: string,
@@ -56,6 +70,15 @@ export interface PyWebViewApi {
   open_logs_dir: () => Promise<void>;
   retry_task: (task_index: number) => Promise<{ success: boolean; error?: string }>;
   retry_all_failed: () => Promise<{ success: boolean; count?: number; error?: string }>;
+  select_image_folder: () => Promise<SelectImageFolderResult>;
+  create_custom_template: (
+    images: string[],
+    task_type: string,
+    aspect_ratio: string,
+    resolution: string,
+    output_dir: string,
+    default_prompt?: string
+  ) => Promise<CreateCustomTemplateResult>;
 }
 
 declare global {
