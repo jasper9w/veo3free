@@ -103,6 +103,8 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+      
       - name: Download all artifacts
         uses: actions/download-artifact@v4
 
@@ -111,10 +113,27 @@ jobs:
           cd veo3free-windows
           zip -r ../veo3free-windows.zip veo3free.exe
 
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Extract changelog for version
+        id: changelog
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          awk "/## \[${VERSION}\]/,/## \[/{if(/## \[${VERSION}\]/)p=1;else if(/## \[/)p=0;if(p)print}" CHANGELOG.md > release_notes.md
+          # 如果没有找到版本说明，使用默认内容
+          if [ ! -s release_notes.md ]; then
+            echo "## $VERSION" > release_notes.md
+            echo "" >> release_notes.md
+            echo "查看完整更新: [完整更新日志](https://github.com/jasper9w/veo3free/compare/v1.1.14...v${VERSION})" >> release_notes.md
+          fi
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             veo3free-macos/veo3free-macos.dmg
             veo3free-windows.zip
-          generate_release_notes: true
+          body_path: release_notes.md
+          generate_release_notes: false
