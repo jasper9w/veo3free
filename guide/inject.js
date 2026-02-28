@@ -149,8 +149,8 @@
             ">刷新</a>页面
         `;
 
-        overlayMask.appendChild(tip);
-        document.body.appendChild(overlayMask);
+        // overlayMask.appendChild(tip);
+        // document.body.appendChild(overlayMask);
 
         // 刷新链接点击事件
         document.getElementById('refresh-link').addEventListener('click', () => {
@@ -289,7 +289,7 @@
 
     function createCustomEvent() {
         window.dispatchEvent(new CustomEvent('routechange', {
-            detail: {url: window.location.href}
+            detail: { url: window.location.href }
         }));
     }
 
@@ -352,6 +352,9 @@
         return r;
     };
 
+    window.$x = $x
+    window.$x1 = $x1
+
     const sleep = ms => new Promise(r => setTimeout(r, ms));
 
     // 通用等待函数（先等待再检查，避免立即满足条件）
@@ -359,7 +362,11 @@
         const start = Date.now();
         while (Date.now() - start < timeout) {
             await sleep(interval);
-            if (await conditionFn()) return true;
+            const succ = await conditionFn();
+            console.log("waitUntil=", succ)
+            if (succ) {
+                return true
+            }
         }
         return false;
     }
@@ -370,7 +377,7 @@
         const ab = new ArrayBuffer(byteString.length);
         const ia = new Uint8Array(ab);
         for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
-        return new File([new Blob([ab], {type: 'image/jpeg'})], filename, {type: 'image/jpeg'});
+        return new File([new Blob([ab], { type: 'image/jpeg' })], filename, { type: 'image/jpeg' });
     }
 
     // 上传文件到 input 并等待完成
@@ -381,50 +388,62 @@
         const dt = new DataTransfer();
         dt.items.add(base64ToFile(base64Data, filename));
         fileInput.files = dt.files;
-        fileInput.dispatchEvent(new Event('change', {bubbles: true}));
+        fileInput.dispatchEvent(new Event('change', { bubbles: true }));
 
         await sleep(1000);
-        const cropBtn = $x('//button[contains(., "Crop and Save")]')[0];
-        if (!cropBtn) throw new Error('未找到Crop and Save按钮');
-        cropBtn.click();
-
-        const ok = await waitUntil(() => !$x1('//button[contains(., "Upload")]'));
+        const ok = await waitUntil(() => $x1('//div[@data-item-index="0"]/div/div[1]//img'));
         if (!ok) throw new Error('上传超时');
     }
 
     // 上传参考图
     async function uploadReferenceImage(base64Data) {
         await sleep(1000);
-        const addBtn = $x('//textarea[@id="PINHOLE_TEXT_AREA_ELEMENT_ID"]/..//button/i[text()="add"]')[0];
-        if (!addBtn) throw new Error('未找到add按钮');
-        addBtn.click();
-        await sleep(1000);
-        await uploadFileToInput(base64Data, 'reference.jpg');
+
+        clickByText('add', '*', 'Add Media');
+
+        const filename = `ref_${Math.random().toString(36).slice(2, 10)}.jpg`;
+        await uploadFileToInput(base64Data, filename);
+
+
+
+        await clickByText('Create', 'span', 'add_2');
+
+        const searchInputEl = $x1('//input[@placeholder]');
+
+        console.warn('searchInputEl', searchInputEl)
+        // 触发搜索输入
+        if (searchInputEl) {
+            function setReactInputValue(element, value) {
+                // 获取 React 内部用的原生 value setter（绕过 React 的追踪）
+                const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+                    window.HTMLInputElement.prototype,
+                    'value'
+                ).set;
+
+                nativeInputValueSetter.call(element, value);
+
+                // 派发 input 事件，触发 React 的 onChange 合成事件
+                element.dispatchEvent(new Event('input', { bubbles: true }));
+
+                // 部分组件还监听了 change，一并派发保险
+                element.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            setReactInputValue(searchInputEl, filename);
+            await sleep(1000);
+            await clickByText(filename, 'div')
+
+        }
     }
 
     // 上传首尾帧
     async function uploadFrameImages(frameImages) {
         if (!frameImages?.length) throw new Error('首帧是必需的');
 
-        // 首帧
-        const addBtns = $x('//textarea[@id="PINHOLE_TEXT_AREA_ELEMENT_ID"]/..//button/i[text()="add"]');
-        if (!addBtns[0]) throw new Error('未找到首帧上传按钮');
-        addBtns[0].click();
-        await sleep(1000);
-        await uploadFileToInput(frameImages[0], 'first.jpg');
-        console.log('✅ 首帧上传成功');
 
-        // 尾帧
-        if (frameImages.length > 1) {
-            await sleep(1000);
-            const addBtn2 = $x('//textarea[@id="PINHOLE_TEXT_AREA_ELEMENT_ID"]/..//button/i[text()="add"]')[0];
-            if (addBtn2) {
-                addBtn2.click();
-                await sleep(1000);
-                await uploadFileToInput(frameImages[1], 'last.jpg');
-                console.log('✅ 尾帧上传成功');
-            }
-        }
+
+        clickByText('add', '*', 'Add Media')
+        // clickByText('Upload image', '*', 'Add Media')
+        await uploadFileToInput(frameImages[0], 'last.jpg');
     }
 
     function sendWsMessage(data) {
@@ -436,12 +455,148 @@
 
     function sendStatus(msg) {
         console.log('📌', msg);
-        sendWsMessage({type: 'status', message: msg});
+        sendWsMessage({ type: 'status', message: msg });
     }
 
     function sendResult(taskId, error) {
-        sendWsMessage({type: 'result', task_id: taskId, error});
+        sendWsMessage({ type: 'result', task_id: taskId, error });
     }
+    async function inputPrompt(prompt_text) {
+        const editorDiv = document.querySelector('div[data-slate-editor="true"]');
+
+        if (!editorDiv) {
+            console.warn('未找到编辑器');
+            return;
+        }
+
+        editorDiv.focus();
+        await new Promise(r => setTimeout(r, 100));
+
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(editorDiv);
+        selection.removeAllRanges();
+        selection.addRange(range);
+
+        editorDiv.dispatchEvent(new InputEvent('beforeinput', {
+            bubbles: true,
+            cancelable: true,
+            inputType: 'deleteContentBackward'
+        }));
+        await new Promise(r => setTimeout(r, 50));
+
+        for (let i = 0; i < prompt_text.length; i++) {
+            editorDiv.dispatchEvent(new InputEvent('beforeinput', {
+                bubbles: true,
+                cancelable: true,
+                inputType: 'insertText',
+                data: prompt_text[i]
+            }));
+
+            await new Promise(r => setTimeout(r, 10));
+
+            editorDiv.dispatchEvent(new InputEvent('input', {
+                bubbles: true,
+                inputType: 'insertText',
+                data: prompt_text[i]
+            }));
+
+            await new Promise(r => setTimeout(r, 10));
+        }
+    }
+    window.inputPrompt = inputPrompt
+
+
+
+    /**
+ * 模拟鼠标点击指定文本的元素
+ * @param {string} containText - 目标元素包含的文本
+ * @param {string} elType      - 元素标签名，如 'button', 'span', 'div'
+ * @param {string} anchorText  - 锚点文本，有多个同名元素时，点击距离锚点最近的那个
+ *
+ * @example clickByText('button', '删除')              // 直接点击包含"删除"的按钮
+ * @example clickByText('button', '删除', '订单A')     // 点击靠近"订单A"的那个"删除"按钮
+ * @example clickByText('button', '')                  // containText 为空时，点击坐标 (1, 1)
+ *
+ * @note 同时派发 PointerEvent + MouseEvent，兼容 Radix UI 等监听 pointer 事件的组件库
+ */
+    async function clickByText(containText, elType = '*', anchorText = null) {
+        console.log(`containText=${containText}, elType=${elType}, anchorText=${anchorText}`)
+
+        const $x = (xpath, ctx = document) => {
+            const r = [], q = document.evaluate(xpath, ctx, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+            for (let i = 0; i < q.snapshotLength; i++) r.push(q.snapshotItem(i));
+            return r;
+        };
+
+        const dispatch = (target, cx, cy) => {
+            const pos = { bubbles: true, cancelable: true, view: window, clientX: cx, clientY: cy };
+            target.dispatchEvent(new PointerEvent('pointerdown', { ...pos, pointerId: 1 }));
+            target.dispatchEvent(new PointerEvent('pointerup', { ...pos, pointerId: 1 }));
+            ['mouseover', 'mouseenter', 'mousemove', 'mousedown', 'mouseup', 'click'].forEach(type => {
+                target.dispatchEvent(new MouseEvent(type, pos));
+            });
+        };
+
+        // containText 为空时，点击坐标 (1, 1) 处的元素
+        if (!containText) {
+            const target = document.elementFromPoint(1, 1) ?? document.body;
+            // console.log(`[clickByText] containText 为空，点击坐标 (1, 1)`, target);
+            dispatch(target, 1, 1);
+            // console.log(`[clickByText] ✅ 完成`);
+            return;
+        }
+
+        const candidates = Array.from($x(`//${elType}[contains(text(), '${containText}')]`));
+        // console.log(`[clickByText] 找到 ${candidates.length} 个 <${elType}> 候选元素`, candidates);
+
+        let target = candidates[0];
+
+        if (anchorText) {
+            const anchor = $x(`//*[contains(text(), '${anchorText}')]`)[0];
+            // console.log(`[clickByText] 锚点元素:`, anchor);
+            const { x: ax, y: ay } = anchor.getBoundingClientRect();
+            target = candidates.sort((a, b) => {
+                const ra = a.getBoundingClientRect();
+                const rb = b.getBoundingClientRect();
+                return Math.hypot(ra.x - ax, ra.y - ay) - Math.hypot(rb.x - ax, rb.y - ay);
+            })[0];
+            // console.log(`[clickByText] 最近候选元素:`, target);
+        }
+
+        const { x, y, width, height } = target.getBoundingClientRect();
+        const cx = x + width / 2, cy = y + height / 2;
+        // console.log(`[clickByText] 点击坐标: (${cx.toFixed(0)}, ${cy.toFixed(0)})`, target);
+
+        dispatch(target, cx, cy);
+        // console.log(`[clickByText] ✅ 完成`);
+
+        await new Promise(resolve => setTimeout(resolve, 300));
+    }
+    window.clickByText = clickByText
+
+
+    // async function handleImageGen(taskType, aspectRatio, resolution, referenceImages) {
+    //     await clickByText(''); // 重置
+
+    //     await clickByText("crop_", "*", "arrow_forward") // 展开参数
+
+    //     // 任务类型
+    //     const useType = taskType.indexOf("Image") > -1 ? "Image" : "Video"
+    //     await clickByText(useType, "*", "arrow_forward")   // 设置任务类型
+    //     await clickByText("x1", "*", "arrow_forward")      // 只出1个
+
+    //     const useAspect = aspectRatio.indexOf("16:9") > -1 ? "Landscape" : "Portrait"
+    //     await clickByText(useAspect, "*", "arrow_forward") // 设置方向
+
+    //     if ("Image" == useType) {
+    //         await clickByText("arrow_drop_down", "*", "arrow_forward")
+    //         await clickByText("Nano Banana 2", "*", "arrow_forward")
+    //     } else {
+    //         await clickByText("arrow_drop_down", "*", "arrow_forward")
+    //         await clickByText("Veo 3.1 - Quality", "*", "arrow_forward")
+    //     }
+    // }
 
     async function executeTask(taskId, prompt, taskType, aspectRatio, resolution, referenceImages) {
         console.log('🚀 执行任务:', taskId, taskType, prompt.substring(0, 30) + '...');
@@ -451,30 +606,30 @@
         capturedImageData = null;
 
         try {
-            // 选择任务类型
-            const taskBtn = $x('//textarea[@id="PINHOLE_TEXT_AREA_ELEMENT_ID"]/..//button[1]')[0];
-            taskBtn.dispatchEvent(new PointerEvent('pointerdown', {
-                bubbles: true,
-                pointerType: 'touch',
-                isPrimary: true
-            }));
-            taskBtn.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
-            taskBtn.click();
-            await sleep(300);
-            $x(`//div[@role="option"]//*[contains(text(), '${taskType}')]`)[0]?.click();
-            await sleep(300);
 
-            // 先设置参数（比例/方向）
-            sendStatus('设置参数...');
-            $x1('//textarea[@id="PINHOLE_TEXT_AREA_ELEMENT_ID"]/..//button[contains(., "Settings")]')?.click();
-            await sleep(300);
-            $x1('//button[contains(., "Aspect Ratio")]')?.click();
-            await sleep(300);
-            $x1(`//div[@role="option"]//span[contains(text(), "${aspectRatio}")]`)?.click();
-            await sleep(300);
-            $x1('//button[contains(., "Outputs per prompt")]')?.click();
-            await sleep(300);
-            $x1('//div[@role="option" and normalize-space()="1"]')?.click();
+            await clickByText(''); // 重置
+
+
+            // 输入prompt
+            await inputPrompt(prompt)
+
+            await clickByText("crop_", "*", "arrow_forward") // 展开参数
+
+            // 任务类型
+            const useType = taskType.indexOf("Image") > -1 ? "Image" : "Video"
+            await clickByText(useType, "button", "Landscape")       // 设置任务类型
+            await clickByText("x1", "*", "arrow_forward")      // 只出1个
+
+            const useAspect = aspectRatio.indexOf("16:9") > -1 ? "Landscape" : "Portrait"
+            await clickByText(useAspect, "*", "arrow_forward") // 设置方向
+
+            if ("Image" == useType) {
+                await clickByText("arrow_drop_down", "*", "arrow_forward")
+                await clickByText("Nano Banana 2", "*", "arrow_forward")
+            } else {
+                await clickByText("arrow_drop_down", "*", "arrow_forward")
+                await clickByText("Veo 3.1 - Quality", "*", "arrow_forward")
+            }
 
             // 再上传图片
             if (taskType === 'Frames to Video') {
@@ -489,22 +644,14 @@
                 }
             }
 
-            // 输入prompt
-            sendStatus('开始: ' + prompt.substring(0, 30));
-            const input = $x1('//textarea[@id="PINHOLE_TEXT_AREA_ELEMENT_ID"]');
-            if (!input) throw new Error('未找到输入框');
-            input.click();
-            await sleep(300);
-            input.focus();
-            document.execCommand('selectAll');
-            document.execCommand('insertText', false, prompt);
-            await sleep(300);
-            $x1('(//textarea[@id="PINHOLE_TEXT_AREA_ELEMENT_ID"]/..//button)[last()]')?.click();
+
+            // 执行
+            await clickByText("arrow_forward", "i", "arrow_forward")
             sendStatus('等待生成...');
 
             // 等待生成完成
             const genOk = await waitUntil(() => {
-                const container = $x1('//div[@data-item-index][contains(., "Reuse prompt")]/div/div/div/div/div[1]');
+                const container = $x1('//div[@data-item-index="0"]//div[@data-tile-id]');
                 if (!container) return false;
                 if ($x1(".//img | .//video", container)) return true;
                 const text = container.innerText;
@@ -516,11 +663,6 @@
 
             // 下载
             sendStatus('下载中...');
-            const taskContainer = $x1('//div[@data-item-index][contains(., "Reuse prompt")]/div/div/div/div');
-            const downloadIconBtn = $x1(`//button[.//*[contains(text(),'download')]]`, taskContainer);
-            if (!downloadIconBtn) throw new Error('未找到下载图标按钮');
-            downloadIconBtn.click();
-            await sleep(500);
 
             const resMap = {
                 "1080p": "Upscaled (1080p)", "720p": "Original size (720p)",
@@ -529,7 +671,7 @@
 
             let base64Data = null;
             if (resolution.toUpperCase() === '1K') {
-                const img1k = $x1('//div[@data-item-index][contains(., "Reuse prompt")]/div/div/div/div/div[1]//img');
+                const img1k = $x1('//div[@data-item-index="0"]//div[@data-tile-id]//img');
                 const response = await fetch(img1k.src);
                 const blob = await response.blob();
 
@@ -570,7 +712,7 @@
                         await sleep(100);
                     }
                 } else {
-                    sendWsMessage({type: 'image_data', task_id: taskId, data: base64Data});
+                    sendWsMessage({ type: 'image_data', task_id: taskId, data: base64Data });
                 }
                 sendStatus('完成 ✅');
             } else {
